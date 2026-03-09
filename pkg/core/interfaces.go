@@ -138,13 +138,13 @@ type ToolResult struct {
 }
 
 // NewSuccessResult creates a successful tool result.
-func NewSuccessResult(output string) ToolResult {
-	return ToolResult{Success: true, Output: output}
+func NewSuccessResult(output string) *ToolResult {
+	return &ToolResult{Success: true, Output: output}
 }
 
 // NewErrorResult creates a failed tool result.
-func NewErrorResult(err string) ToolResult {
-	return ToolResult{Success: false, Error: &err}
+func NewErrorResult(err string) *ToolResult {
+	return &ToolResult{Success: false, Error: &err}
 }
 
 // ============================================================================
