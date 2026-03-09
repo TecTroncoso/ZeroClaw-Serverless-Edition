@@ -98,10 +98,11 @@ Identidad estructurada basada en el estándar [AIEOS v1.1](https://aieos.org):
 zeroclaw-go/
 ├── api/
 │   └── webhook.go           # 📍 Entry point de Vercel Serverless
-├── internal/
+├── pkg/                      # 📦 Código fuente del framework (USAR ESTA CARPETA)
 │   ├── agent/
 │   │   └── loop.go          # 🤖 Core del agente (tool-calling loop)
 │   ├── channels/
+│   │   ├── common.go        # 📇 Interfaz común de canales
 │   │   ├── telegram.go      # 📱 Canal Telegram
 │   │   ├── discord.go       # 💬 Canal Discord
 │   │   ├── slack.go         # 💼 Canal Slack
@@ -116,13 +117,15 @@ zeroclaw-go/
 │   │   └── openai.go        # 🔌 Provider universal
 │   └── tools/
 │       ├── websearch.go     # 🔍 Herramienta de búsqueda
-│       ├── webfetch.go      # 🌐 Herramienta de fetch
-│       └── httprequest.go   # 📡 Herramienta HTTP
+│       ├── webfetch.go     # 🌐 Herramienta de fetch
+│       └── httprequest.go  # 📡 Herramienta HTTP
 ├── sql/
 │   └── schema_final.sql     # 🗃️ Único archivo SQL necesario
 ├── go.mod                   # 📦 Definición de módulo Go
 └── README.md                # 📖 Este archivo
 ```
+
+> ⚠️ **NOTA**: Anteriormente existía una carpeta `internal/` con código duplicado. El proyecto ahora usa exclusivamente `pkg/` como fuente de verdad. La carpeta `internal/` puede eliminarse una vez validado el funcionamiento.
 
 ---
 
@@ -133,9 +136,10 @@ zeroclaw-go/
 ```bash
 # En GitHub (interfaz web o local)
 # 1. Crear nuevo repositorio en GitHub
-# 2. Subir todo el código de zeroclaw-go
+# 2. Subir todo el código de zeroclaw-go (excepto internal/ si existe)
 # 3. El repositorio debe contener:
 #    - api/webhook.go (entry point)
+#    - pkg/ (código fuente)
 #    - go.mod (Vercel detecta Go automáticamente)
 #    - sql/schema_final.sql (base de datos)
 ```
