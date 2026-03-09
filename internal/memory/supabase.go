@@ -64,9 +64,9 @@ func NewSupabaseMemory(cfg *SupabaseConfig) (*SupabaseMemory, error) {
 	}
 
 	return &SupabaseMemory{
-		db:                db,
-		embeddingService:  cfg.EmbeddingService,
-		defaultDimension:  dimension,
+		db:               db,
+		embeddingService: cfg.EmbeddingService,
+		defaultDimension: dimension,
 	}, nil
 }
 
@@ -97,8 +97,8 @@ func (m *SupabaseMemory) storeWithoutEmbedding(ctx context.Context, key, content
 	query := `
 		INSERT INTO memory_entries (key, content, category, session_id)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (key) 
-		DO UPDATE SET 
+		ON CONFLICT (key)
+		DO UPDATE SET
 			content = EXCLUDED.content,
 			category = EXCLUDED.category,
 			session_id = EXCLUDED.session_id,
@@ -123,8 +123,8 @@ func (m *SupabaseMemory) StoreWithEmbedding(ctx context.Context, key, content st
 	query := `
 		INSERT INTO memory_entries (key, content, category, session_id, embedding)
 		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (key) 
-		DO UPDATE SET 
+		ON CONFLICT (key)
+		DO UPDATE SET
 			content = EXCLUDED.content,
 			category = EXCLUDED.category,
 			session_id = EXCLUDED.session_id,
@@ -224,7 +224,7 @@ func (m *SupabaseMemory) List(ctx context.Context, category *core.MemoryCategory
 		SELECT id, key, content, category, timestamp, session_id, score, metadata
 		FROM memory_entries
 		WHERE ($1::text IS NULL OR category = $1)
-		  AND ($2::text IS NULL OR session_id = $2)
+		AND ($2::text IS NULL OR session_id = $2)
 		ORDER BY timestamp DESC
 	`
 
@@ -370,7 +370,7 @@ func (m *SupabaseMemory) embeddingToPostgresArray(embedding []float32) string {
 }
 
 // ============================================================================
-// HYBRID SEARCH (Vector + Full-Text)
+// HYBRID SEARCH (Vector + Full-Text with RRF)
 // ============================================================================
 
 // HybridConfig holds configuration for hybrid search.
@@ -398,6 +398,18 @@ func DefaultHybridConfig() *HybridConfig {
 // - FTS: exact keyword matching, handles acronyms, specific terms
 //
 // The function uses RRF (Reciprocal Rank Fusion) to combine rankings from both methods.
+//
+// SQL function signature (schema_definitive.sql):
+//
+//	hybrid_search_memories(
+//	    query_embedding vector(1536),  -- $1
+//	    query_text TEXT,               -- $2
+//	    match_count INT DEFAULT 10,    -- $3
+//	    p_session_id TEXT DEFAULT NULL,-- $4
+//	    semantic_weight FLOAT DEFAULT 0.5, -- $5
+//	    fts_weight FLOAT DEFAULT 0.3,  -- $6
+//	    rrf_k INT DEFAULT 60           -- $7
+//	)
 func (m *SupabaseMemory) RecallHybrid(ctx context.Context, queryText string, queryEmbedding []float32, limit int, sessionID *string) ([]core.MemoryEntry, error) {
 	// Validate inputs
 	if queryEmbedding == nil || len(queryEmbedding) == 0 {
@@ -410,7 +422,7 @@ func (m *SupabaseMemory) RecallHybrid(ctx context.Context, queryText string, que
 	// Use default config
 	cfg := DefaultHybridConfig()
 
-	// Prepare query
+	// Prepare query - matches hybrid_search_memories signature exactly
 	query := `
 		SELECT id, key, content, category, timestamp, session_id, score, metadata,
 		       semantic_score, fts_score, rrf_score
@@ -423,15 +435,15 @@ func (m *SupabaseMemory) RecallHybrid(ctx context.Context, queryText string, que
 		sessionIDVal = *sessionID
 	}
 
-	// Execute query
+	// Execute query with parameters in EXACT order matching SQL function
 	rows, err := m.db.QueryContext(ctx, query,
-		embeddingStr,          // $1: query_embedding
-		queryText,             // $2: query_text
-		limit,                 // $3: match_count
-		sessionIDVal,          // $4: session_id
-		cfg.SemanticWeight,    // $5: semantic_weight
-		cfg.FTSWeight,         // $6: fts_weight
-		cfg.RRFk,              // $7: rrf_k
+		embeddingStr,       // $1: query_embedding
+		queryText,          // $2: query_text
+		limit,              // $3: match_count
+		sessionIDVal,       // $4: p_session_id
+		cfg.SemanticWeight, // $5: semantic_weight
+		cfg.FTSWeight,      // $6: fts_weight
+		cfg.RRFk,           // $7: rrf_k
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute hybrid search: %w", err)
@@ -469,7 +481,7 @@ func (m *SupabaseMemory) RecallHybridWithConfig(ctx context.Context, queryText s
 		cfg = DefaultHybridConfig()
 	}
 
-	// Prepare query
+	// Prepare query - matches hybrid_search_memories signature exactly
 	query := `
 		SELECT id, key, content, category, timestamp, session_id, score, metadata,
 		       semantic_score, fts_score, rrf_score
@@ -482,15 +494,15 @@ func (m *SupabaseMemory) RecallHybridWithConfig(ctx context.Context, queryText s
 		sessionIDVal = *sessionID
 	}
 
-	// Execute query
+	// Execute query with parameters in EXACT order matching SQL function
 	rows, err := m.db.QueryContext(ctx, query,
-		embeddingStr,
-		queryText,
-		limit,
-		sessionIDVal,
-		cfg.SemanticWeight,
-		cfg.FTSWeight,
-		cfg.RRFk,
+		embeddingStr,       // $1: query_embedding
+		queryText,          // $2: query_text
+		limit,              // $3: match_count
+		sessionIDVal,       // $4: p_session_id
+		cfg.SemanticWeight, // $5: semantic_weight
+		cfg.FTSWeight,      // $6: fts_weight
+		cfg.RRFk,           // $7: rrf_k
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute hybrid search: %w", err)
@@ -513,15 +525,7 @@ func (m *SupabaseMemory) RecallHybridWithConfig(ctx context.Context, queryText s
 	return entries, nil
 }
 
-// HybridEntry represents a memory entry with additional hybrid search scores.
-type HybridEntry struct {
-	core.MemoryEntry
-	SemanticScore float64 `json:"semantic_score"`
-	FTSScore     float64 `json:"fts_score"`
-	RRFScore     float64 `json:"rrf_score"`
-}
-
-// scanHybridEntry scans a row from hybrid search into a HybridEntry.
+// scanHybridEntry scans a row from hybrid search into a MemoryEntry.
 func (m *SupabaseMemory) scanHybridEntry(scanner interface{ Scan(dest ...interface{}) error }) (*core.MemoryEntry, error) {
 	var entry core.MemoryEntry
 	var categoryStr string
@@ -569,6 +573,15 @@ func (m *SupabaseMemory) scanHybridEntry(scanner interface{ Scan(dest ...interfa
 
 // SearchFTS performs pure full-text search without vector similarity.
 // Useful when you only need keyword matching.
+//
+// SQL function signature (schema_definitive.sql):
+//
+//	search_memories_fts(
+//	    query_text TEXT,               -- $1
+//	    match_count INT DEFAULT 10,    -- $2
+//	    p_session_id TEXT DEFAULT NULL,-- $3
+//	    p_category TEXT DEFAULT NULL   -- $4
+//	)
 func (m *SupabaseMemory) SearchFTS(ctx context.Context, queryText string, limit int, sessionID *string, category *string) ([]core.MemoryEntry, error) {
 	if queryText == "" {
 		return nil, fmt.Errorf("query text is required for FTS search")
@@ -606,45 +619,6 @@ func (m *SupabaseMemory) SearchFTS(ctx context.Context, queryText string, limit 
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating FTS search results: %w", err)
-	}
-
-	return entries, nil
-}
-
-// ============================================================================
-// HYBRID SEARCH (Optional Advanced Feature)
-// ============================================================================
-
-// HybridSearch performs combined keyword and semantic search.
-func (m *SupabaseMemory) HybridSearch(ctx context.Context, queryText string, embedding []float32, limit int, semanticWeight float64, sessionID *string) ([]core.MemoryEntry, error) {
-	query := `
-		SELECT id, key, content, category, timestamp, session_id, score, metadata
-		FROM hybrid_search_memories($1, $2, $3, $4, NULL, $5)
-	`
-
-	embeddingStr := m.embeddingToPostgresArray(embedding)
-	var sessionIDVal interface{}
-	if sessionID != nil {
-		sessionIDVal = *sessionID
-	}
-
-	rows, err := m.db.QueryContext(ctx, query, queryText, embeddingStr, limit, semanticWeight, sessionIDVal)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hybrid search memories: %w", err)
-	}
-	defer rows.Close()
-
-	var entries []core.MemoryEntry
-	for rows.Next() {
-		entry, err := m.scanMemoryEntry(rows)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, *entry)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating memory entries: %w", err)
 	}
 
 	return entries, nil

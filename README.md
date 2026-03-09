@@ -1,22 +1,22 @@
 # 🚀 ZeroClaw Go (Serverless Edition)
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go" alt="Go Version">
-  <img src="https://img.shields.io/badge/Platform-Vercel-000000?style=for-the-badge&logo=vercel" alt="Platform">
-  <img src="https://img.shields.io/badge/Database-Supabase-3FCF8E?style=for-the-badge&logo=supabase" alt="Database">
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License">
+<img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go" alt="Go Version">
+<img src="https://img.shields.io/badge/Platform-Vercel-000000?style=for-the-badge&logo=vercel" alt="Platform">
+<img src="https://img.shields.io/badge/Database-Supabase-3FCF8E?style=for-the-badge&logo=supabase" alt="Database">
+<img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License">
 </p>
 
-**ZeroClaw Go** es un framework de agentes de IA autónomos ultra-ligero, diseñado **exclusivamente** para entornos Serverless. Construido sobre cimientos sólida de Go y desplegado en Vercel, ofrece una arquitectura modernas sin la complejidad de infrastructura tradicional.
+**ZeroClaw Go** es un framework de agentes de IA autónomos ultra-ligero, diseñado **exclusivamente** para entornos Serverless. Construido sobre cimientos sólidos de Go y desplegado en Vercel, ofrece una arquitectura moderna sin la complejidad de infraestructura tradicional.
 
 ## 🎯 Por qué ZeroClaw Go?
 
-Los agentes de IA tradicionales requieren servidores permanentemente activos, lo que significa **cold-starts lentos** y **costes continuos** incluso cuando no hay actividad. ZeroClaw Go revolutiona este paradigma:
+Los agentes de IA tradicionales requieren servidores permanentemente activos, lo que significa **cold-starts lentos** y **costes continuos** incluso cuando no hay actividad. ZeroClaw Go revoluciona este paradigma:
 
 - ⚡ **Cold-Start Cero**: Vercel compiló tu código antes del primer request
 - 💰 **Costo Cero Inactivo**: Solo paga cuando realmente se usa
 - 🌐 **Escala Automática**: De 0 a millones de requests sin configuración
-- 🔄 **Webhooks Nativos**: Cada platform entrega eventos directamente a tu función
+- 🔄 **Webhooks Nativos**: Cada plataforma entrega eventos directamente a tu función
 - 🧠 **Memoria Persistente**: Supabase + pgvector para recall semántico
 
 ---
@@ -34,23 +34,26 @@ Conecta tu agente a múltiples plataformas de mensajería simultáneamente:
 | Slack | Events API Webhook | ✅ Listo |
 | WhatsApp | Cloud API Webhook | ✅ Listo |
 
-Cada canal es **independiente** y se configura vía tokens de entorno. El agente routing determina automáticamente qué canal recibió el mensaje.
+Cada canal es **independiente** y se configura vía tokens de entorno.
 
-### 🧠 Memoria Híbrida Avanzada
+### 🧠 Memoria Híbrida Avanzada (RRF)
 
-El sistema de memoria combina lo mejor de dos mundos:
+El sistema de memoria combina lo mejor de dos mundos usando **Reciprocal Rank Fusion (RRF)**:
 
-- **Búsqueda Vectorial** (pgvector): Similitud semántica con embeddings de OpenAI
+- **Búsqueda Vectorial** (pgvector): Similitud semántica con embeddings
 - **Búsqueda de Texto Completo** (FTS): Coincidencia exacta de palabras clave
-- **Fusión RRF**: [Reciprocal Rank Fusion](https://dl.acm.org/doi/10.1145/3404835.3462952) para ranking óptimo
+- **Fusión RRF**: Ranking óptimo combinando ambos métodos
 
 ```sql
 -- La función hybrid_search_memories combina ambos métodos
 SELECT * FROM hybrid_search_memories(
-    embedding,      -- Vector de búsqueda
-    'query text',  -- Texto para FTS
-    10,            -- Límite de resultados
-    session_id     -- Filtrar por sesión
+    embedding,      -- $1: Vector de búsqueda (1536 dims)
+    'query text',   -- $2: Texto para FTS
+    10,             -- $3: Límite de resultados
+    session_id,     -- $4: Filtrar por sesión
+    0.5,            -- $5: Peso semántico
+    0.3,            -- $6: Peso FTS
+    60              -- $7: Parámetro RRF k
 );
 ```
 
@@ -87,8 +90,6 @@ Identidad estructurada basada en el estándar [AIEOS v1.1](https://aieos.org):
 - **Capabilities**: Skills, tools, limitaciones
 - **Directives**: Reglas de operación y seguridad
 
-Todo programático, sin archivos `.md` locales.
-
 ---
 
 ## 📂 Estructura del Proyecto
@@ -96,32 +97,31 @@ Todo programático, sin archivos `.md` locales.
 ```
 zeroclaw-go/
 ├── api/
-│   └── webhook.go          # 📍 Entry point de Vercel Serverless
+│   └── webhook.go           # 📍 Entry point de Vercel Serverless
 ├── internal/
 │   ├── agent/
-│   │   └── loop.go        # 🤖 Core del agente (tool-calling loop)
+│   │   └── loop.go          # 🤖 Core del agente (tool-calling loop)
 │   ├── channels/
-│   │   ├── telegram.go    # 📱 Canal Telegram
-│   │   ├── discord.go     # 💬 Canal Discord
-│   │   ├── slack.go       # 💼 Canal Slack
-│   │   └── whatsapp.go    # 💭 Canal WhatsApp
+│   │   ├── telegram.go      # 📱 Canal Telegram
+│   │   ├── discord.go       # 💬 Canal Discord
+│   │   ├── slack.go         # 💼 Canal Slack
+│   │   └── whatsapp.go      # 💭 Canal WhatsApp
 │   ├── core/
-│   │   ├── interfaces.go  # 🔧 Definiciones de interfaces
-│   │   ├── identity.go   # 🎭 Sistema de identidad
-│   │   └── aieos.go     # 📋 Parser AIEOS
+│   │   ├── interfaces.go    # 🔧 Definiciones de interfaces
+│   │   ├── identity.go      # 🎭 Sistema de identidad
+│   │   └── aieos.go         # 📋 Parser AIEOS
 │   ├── memory/
-│   │   └── supabase.go   # 🗄️ Implementación de memoria
+│   │   └── supabase.go      # 🗄️ Memoria con Supabase/pgvector
 │   ├── providers/
-│   │   └── openai.go     # 🔌 Provider universal
+│   │   └── openai.go        # 🔌 Provider universal
 │   └── tools/
-│       ├── websearch.go  # 🔍 Herramienta de búsqueda
-│       ├── webfetch.go   # 🌐 Herramienta de fetch
-│       └── httprequest.go # 📡 Herramienta HTTP
+│       ├── websearch.go     # 🔍 Herramienta de búsqueda
+│       ├── webfetch.go      # 🌐 Herramienta de fetch
+│       └── httprequest.go   # 📡 Herramienta HTTP
 ├── sql/
-│   ├── schema.sql        # 🗃️ Schema base de Supabase
-│   └── hybrid_search.sql # 🔬 Funciones de búsqueda híbrida
-├── go.mod                # 📦 Definición de módulo Go
-└── README.md             # 📖 Este archivo
+│   └── schema_final.sql     # 🗃️ Único archivo SQL necesario
+├── go.mod                   # 📦 Definición de módulo Go
+└── README.md                # 📖 Este archivo
 ```
 
 ---
@@ -137,17 +137,21 @@ zeroclaw-go/
 # 3. El repositorio debe contener:
 #    - api/webhook.go (entry point)
 #    - go.mod (Vercel detecta Go automáticamente)
+#    - sql/schema_final.sql (base de datos)
 ```
 
 ### Paso 2: Configurar Supabase
 
 1. **Crear proyecto**: Ir a [supabase.com](https://supabase.com) → New Project
+
 2. **Configurar base de datos**:
    - Ir a **SQL Editor**
-   - Copiar y ejecutar [`sql/schema.sql`](sql/schema.sql)
-   - Copiar y ejecutar [`sql/hybrid_search.sql`](sql/hybrid_search.sql)
+   - Copiar y ejecutar **completamente** el archivo [`sql/schema_final.sql`](sql/schema_final.sql)
+   - ⚠️ **IMPORTANTE**: Ejecutar SOLO este archivo, no otros scripts SQL
+
 3. **Obtener conexión**:
    - Settings → Database → Connection string
+   - Seleccionar **Transaction** mode (puerto 6543)
    - Formato: `postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require`
 
 ### Paso 3: Desplegar en Vercel
@@ -160,14 +164,8 @@ zeroclaw-go/
    - Vercel detectará automáticamente:
      - Framework: **Go** (por `go.mod`)
      - Build Command: `go build -o /tmp/main ./api`
-     - Output Directory: (no requerido)
 
-3. **Variables de entorno** (ver sección siguiente):
-
-| Variable | Valor |
-|----------|-------|
-| `SUPABASE_DB_URL` | `postgresql://...` (del paso 2) |
-| `OPENAI_API_KEY` | `sk-...` |
+3. **Variables de entorno** (ver sección siguiente)
 
 4. **Deploy**: Click en **Deploy** 🎉
 
@@ -223,7 +221,7 @@ https://<TU_DOMINIO>/api/webhook?channel=whatsapp
 
 | Variable | Descripción | Ejemplo |
 |----------|-------------|---------|
-| `SUPABASE_DB_URL` | URI de conexión PostgreSQL | `postgresql://postgres.xxx:pass@host:6543/postgres?sslmode=require` |
+| `SUPABASE_DB_URL` | URI de conexión PostgreSQL (Transaction mode) | `postgresql://postgres.xxx:pass@host:6543/postgres?sslmode=require` |
 | `OPENAI_API_KEY` | Clave de API del provider | `sk-proj-xxx` |
 
 ### 🎛️ Provider (Opcionales)
@@ -271,10 +269,54 @@ OPENAI_MODEL=grok-beta
 
 ### 🔍 Herramientas (Opcionales)
 
-| Variable | Descripción |
-|----------|-------------|
-| `SEARCH_API_KEY` | API key para Tavily/Brave (opcional para DuckDuckGo) |
-| `SEARCH_PROVIDER` | `duckduckgo` (default), `tavily`, o `brave` |
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `SEARCH_API_KEY` | (vacío) | API key para Tavily/Brave |
+| `SEARCH_PROVIDER` | `duckduckgo` | Provider: `duckduckgo`, `tavily`, o `brave` |
+
+---
+
+## 🗃️ Base de Datos
+
+### Esquema Único
+
+El proyecto utiliza **una sola tabla** en Supabase:
+
+```sql
+memory_entries (
+    id UUID PRIMARY KEY,
+    key TEXT NOT NULL UNIQUE,
+    content TEXT NOT NULL,
+    category TEXT NOT NULL,
+    timestamp TIMESTAMPTZ,
+    session_id TEXT,
+    embedding vector(1536),
+    score FLOAT,
+    metadata JSONB,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+)
+```
+
+### Índices
+
+| Índice | Tipo | Propósito |
+|--------|------|-----------|
+| `idx_memory_entries_key` | B-tree | Lookups por key |
+| `idx_memory_entries_category` | B-tree | Filtrado por categoría |
+| `idx_memory_entries_session_id` | B-tree | Filtrado por sesión |
+| `idx_memory_entries_timestamp` | B-tree | Ordenamiento temporal |
+| `idx_memory_entries_embedding_hnsw` | HNSW | Búsqueda vectorial |
+| `idx_memory_entries_content_fts` | GIN | Full-text search |
+
+### Funciones SQL
+
+| Función | Propósito |
+|---------|-----------|
+| `search_memories()` | Búsqueda semántica pura |
+| `hybrid_search_memories()` | Búsqueda híbrida RRF (7 parámetros) |
+| `search_memories_fts()` | Full-text search pura |
+| `count_memories()` | Contar memorias |
 
 ---
 
@@ -285,5 +327,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <sub>Built with ❤️ for the Serverless Future</sub>
+<sub>Built with ❤️ for the Serverless Future</sub>
 </p>
