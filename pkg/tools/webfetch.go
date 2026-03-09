@@ -221,23 +221,22 @@ func (t *WebFetchTool) cleanHTML(html string) string {
 func decodeHTMLEntities(s string) string {
 	// Common HTML entities
 	replacements := map[string]string{
-		"&nbsp;":   " ",
-		"&":    "&",
-		"<":     "<",
-		">":     ">",
-		""":   "\"",
-		"'":   "'",
-		"'":    "'",
-		"&mdash;":  "—",
-		"&ndash;":  "–",
-		"&copy;":   "©",
-		"&reg;":    "®",
-		"&trade;":  "™",
-		"&lsquo;":  "'",
-		"&rsquo;":  "'",
-		"&ldquo;":  "\"",
-		"&rdquo;":  "\"",
-		"&hellip;": "…",
+		"&nbsp;":    " ",
+		"&amp;":     "&",
+		"&lt;":      "<",
+		"&gt;":      ">",
+		"&quot;":     "\"",
+		"&apos;":   "'",
+		"&mdash;":   "—",
+		"&ndash;":   "–",
+		"&copy;":    "©",
+		"&reg;":     "®",
+		"&trade;":   "™",
+		"&lsquo;":   "'",
+		"&rsquo;":   "'",
+		"&ldquo;":   "\"",
+		"&rdquo;":   "\"",
+		"&hellip;":  "…",
 		"&bull;":   "•",
 		"&middot;": "·",
 	}
@@ -315,7 +314,7 @@ func simpleCleanHTML(html string) string {
 				// Complete entity - simplified handling
 				entityStr := string(entityBuf)
 				switch entityStr {
-				case "&nbsp;", "&", "<", ">", """, "'":
+				case "&nbsp;", "&amp;", "&lt;", "&gt;", "&quot;", "&apos;":
 					buf.WriteRune(' ')
 				}
 				entityBuf = entityBuf[:0]
