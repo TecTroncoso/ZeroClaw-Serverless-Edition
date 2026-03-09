@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeroclaw/zeroclaw-go/internal/agent"
-	"github.com/zeroclaw/zeroclaw-go/internal/channels"
-	"github.com/zeroclaw/zeroclaw-go/internal/core"
-	"github.com/zeroclaw/zeroclaw-go/internal/memory"
-	"github.com/zeroclaw/zeroclaw-go/internal/providers"
-	"github.com/zeroclaw/zeroclaw-go/internal/tools"
+	"github.com/zeroclaw/zeroclaw-go/pkg/agent"
+	"github.com/zeroclaw/zeroclaw-go/pkg/channels"
+	"github.com/zeroclaw/zeroclaw-go/pkg/core"
+	"github.com/zeroclaw/zeroclaw-go/pkg/memory"
+	"github.com/zeroclaw/zeroclaw-go/pkg/providers"
+	"github.com/zeroclaw/zeroclaw-go/pkg/tools"
 )
 
 // ============================================================================
