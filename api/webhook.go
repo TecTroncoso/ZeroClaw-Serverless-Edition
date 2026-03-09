@@ -29,7 +29,7 @@ var (
 	// Global instances initialized on cold start
 	mem     core.Memory
 	prov    core.Provider
-	toolz   []core.ToolSpec
+	toolz   []core.Tool
 	ident   *core.IdentityConfig
 )
 
@@ -42,7 +42,7 @@ func init() {
 		log.Println("ZeroClaw: WARNING - SUPABASE_DB_URL not set, memory disabled")
 	} else {
 		var err error
-		mem, err = memory.NewSupabaseMemory(dbURL)
+		mem, err = memory.NewSupabaseMemory(&memory.SupabaseConfig{ConnectionString: dbURL})
 		if err != nil {
 			log.Printf("ZeroClaw: ERROR - Failed to initialize memory: %v", err)
 		} else {
@@ -55,8 +55,8 @@ func init() {
 	log.Printf("ZeroClaw: Provider initialized (model: %s)", os.Getenv("OPENAI_MODEL"))
 
 	// Initialize Tools
-	toolz = []core.ToolSpec{
-		tools.NewWebSearchTool().Spec(),
+	toolz = []core.Tool{
+		tools.NewWebSearchTool(),
 	}
 	log.Printf("ZeroClaw: %d tools registered", len(toolz))
 
@@ -375,22 +375,22 @@ func autoDetectChannel(body []byte) (*channels.IncomingMessage, channels.Channel
 // processMessage runs the agent loop to process an incoming message.
 func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string, error) {
 	// Build agent configuration
-	config := &agent.AgentConfig{
-		MaxToolIterations: 2,
-		Temperature:       0.7,
-		Model:             os.Getenv("OPENAI_MODEL"),
+	config := &agent.Config{
+		MaxIterations: 2,
+		Temperature:   0.7,
+		Model:         os.Getenv("OPENAI_MODEL"),
 	}
 
 	// Create agent
 	ag := agent.NewAgent(mem, prov, toolz, config, ident)
 
 	// Run agent loop
-	response, err := ag.Run(ctx, msg.Text)
+	result, err := ag.Run(ctx, msg.Text)
 	if err != nil {
 		return "", fmt.Errorf("agent execution failed: %w", err)
 	}
 
-	return response, nil
+	return result.Response, nil
 }
 
 // processAndRespond processes a message and sends response asynchronously.
