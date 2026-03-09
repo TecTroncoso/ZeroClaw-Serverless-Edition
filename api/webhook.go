@@ -452,13 +452,12 @@ func respondText(w http.ResponseWriter, text string, status int) {
 // Vercel expects a function named exactly like the file (without extension).
 // For api/webhook.go, Vercel looks for a function named "Webhook" or a Handler.
 
-// Webhook is the Vercel entrypoint.
-func Webhook(w http.ResponseWriter, r *http.Request) {
+// Handler is the main entrypoint for Vercel Serverless Functions.
+func Handler(w http.ResponseWriter, r *http.Request) {
 	handler(w, r)
 }
 
-// Handler is the main entrypoint for Vercel Serverless Functions.
-// This is an alias for Webhook to support both naming conventions.
-func Handler(w http.ResponseWriter, r *http.Request) {
-	Webhook(w, r)
+// Webhook is the Vercel entrypoint (alternative naming).
+func Webhook(w http.ResponseWriter, r *http.Request) {
+	handler(w, r)
 }
