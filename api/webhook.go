@@ -69,8 +69,8 @@ func init() {
 // HTTP HANDLER
 // ============================================================================
 
-// Handler is the main entrypoint for Vercel Serverless Functions.
-func Handler(w http.ResponseWriter, r *http.Request) {
+// handler is the main entrypoint for Vercel Serverless Functions.
+func handler(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
 	defer cancel()
@@ -452,7 +452,13 @@ func respondText(w http.ResponseWriter, text string, status int) {
 // Vercel expects a function named exactly like the file (without extension).
 // For api/webhook.go, Vercel looks for a function named "Webhook" or a Handler.
 
-// Webhook is the Vercel entrypoint (alternative to Handler).
+// Webhook is the Vercel entrypoint.
 func Webhook(w http.ResponseWriter, r *http.Request) {
-	Handler(w, r)
+	handler(w, r)
+}
+
+// Handler is the main entrypoint for Vercel Serverless Functions.
+// This is an alias for Webhook to support both naming conventions.
+func Handler(w http.ResponseWriter, r *http.Request) {
+	Webhook(w, r)
 }
