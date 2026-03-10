@@ -7,12 +7,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/zeroclaw/zeroclaw-go/pkg/core"
 
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
+
+// containsParam checks if a connection string already contains a specific parameter.
+func containsParam(connStr, param string) bool {
+	return strings.Contains(connStr, param+"=") || strings.Contains(connStr, "&"+param)
+}
 
 // SupabaseMemory implements the Memory interface using Supabase with pgvector.
 // This replaces the SQLite-based memory from the original ZeroClaw Rust implementation.
@@ -42,8 +48,19 @@ func NewSupabaseMemory(cfg *SupabaseConfig) (*SupabaseMemory, error) {
 		return nil, fmt.Errorf("connection string is required")
 	}
 
+	// Ensure connection string has proper IPv4 fallback for Vercel serverless
+	// Vercel has issues with IPv6 connections, so we force IPv4
+	connStr := cfg.ConnectionString
+	if !containsParam(connStr, "prefer_simple_protocol") {
+		if strings.Contains(connStr, "?") {
+			connStr += "&prefer_simple_protocol=on"
+		} else {
+			connStr += "?prefer_simple_protocol=on"
+		}
+	}
+
 	// Open database connection
-	db, err := sql.Open("postgres", cfg.ConnectionString)
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -53,9 +70,21 @@ func NewSupabaseMemory(cfg *SupabaseConfig) (*SupabaseMemory, error) {
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	// Verify connection
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	// Verify connection with retry logic for serverless cold starts
+	var pingErr error
+	for i := 0; i < 3; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		pingErr = db.PingContext(ctx)
+		cancel()
+		if pingErr == nil {
+			break
+		}
+		time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
+	}
+	if pingErr != nil {
+		// Return nil memory backend instead of error - allows graceful degradation
+		fmt.Printf("ZeroClaw: WARNING - Database connection failed, memory features disabled: %v\n", pingErr)
+		return nil, nil
 	}
 
 	dimension := cfg.EmbeddingDimension
@@ -77,6 +106,16 @@ func (m *SupabaseMemory) Name() string {
 
 // Store saves a memory entry without computing an embedding.
 func (m *SupabaseMemory) Store(ctx context.Context, key, content string, category core.MemoryCategory, sessionID *string) error {
+	// Guard against nil receiver - critical for serverless environments
+	if m == nil {
+		return fmt.Errorf("memory backend not initialized")
+	}
+
+	// Guard against nil database connection
+	if m.db == nil {
+		return fmt.Errorf("database connection not available")
+	}
+
 	// If we have an embedding service, compute the embedding
 	if m.embeddingService != nil {
 		embedding, err := m.embeddingService.GenerateEmbedding(ctx, content)
@@ -150,6 +189,16 @@ func (m *SupabaseMemory) StoreWithEmbedding(ctx context.Context, key, content st
 
 // Recall retrieves memories matching a query using semantic similarity.
 func (m *SupabaseMemory) Recall(ctx context.Context, query string, limit int, sessionID *string) ([]core.MemoryEntry, error) {
+	// Guard against nil receiver - critical for serverless environments
+	if m == nil {
+		return nil, fmt.Errorf("memory backend not initialized")
+	}
+
+	// Guard against nil database connection
+	if m.db == nil {
+		return nil, fmt.Errorf("database connection not available")
+	}
+
 	// Generate embedding for the query
 	if m.embeddingService == nil {
 		return nil, fmt.Errorf("embedding service is required for semantic search")

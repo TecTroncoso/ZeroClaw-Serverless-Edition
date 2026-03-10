@@ -45,6 +45,11 @@ func init() {
 		mem, err = memory.NewSupabaseMemory(&memory.SupabaseConfig{ConnectionString: dbURL})
 		if err != nil {
 			log.Printf("ZeroClaw: ERROR - Failed to initialize memory: %v", err)
+			// Continue without memory - graceful degradation
+			mem = nil
+		} else if mem == nil {
+			// NewSupabaseMemory returns nil when connection fails (graceful degradation)
+			log.Println("ZeroClaw: WARNING - Memory backend unavailable, continuing without memory features")
 		} else {
 			log.Println("ZeroClaw: Memory initialized successfully")
 		}
