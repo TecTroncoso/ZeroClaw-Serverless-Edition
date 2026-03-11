@@ -185,6 +185,30 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 	return embResp.Data[0].Embedding, nil
 }
 
+// GenerateEmbedding implements core.EmbeddingService interface.
+// Delegates to GetEmbedding so OpenAIProvider can be used as a memory embedding service.
+func (p *OpenAIProvider) GenerateEmbedding(ctx context.Context, text string) ([]float32, error) {
+	return p.GetEmbedding(ctx, text)
+}
+
+// GenerateEmbeddings implements core.EmbeddingService for batch embedding.
+func (p *OpenAIProvider) GenerateEmbeddings(ctx context.Context, texts []string) ([][]float32, error) {
+	results := make([][]float32, len(texts))
+	for i, text := range texts {
+		emb, err := p.GetEmbedding(ctx, text)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate embedding for text %d: %w", i, err)
+		}
+		results[i] = emb
+	}
+	return results, nil
+}
+
+// Dimension implements core.EmbeddingService. Returns 1536 for text-embedding-3-small.
+func (p *OpenAIProvider) Dimension() int {
+	return 1536
+}
+
 // ============================================================================
 // REQUEST BUILDING
 // ============================================================================

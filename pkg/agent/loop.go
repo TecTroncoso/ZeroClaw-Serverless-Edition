@@ -141,9 +141,9 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 	result.Iterations = iterations
 	result.ToolCalls = toolCalls
 
-	// STEP 4: Store conversation (async, best-effort)
+	// STEP 4: Store conversation (synchronous - required for serverless)
 	if len(message) >= MinMessageCharsForMemory {
-		go a.storeConversation(message, response)
+		a.storeConversation(message, response)
 	}
 
 	return result, nil

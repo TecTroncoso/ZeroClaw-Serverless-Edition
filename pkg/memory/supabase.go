@@ -200,14 +200,17 @@ func (m *SupabaseMemory) Recall(ctx context.Context, query string, limit int, se
 		return nil, fmt.Errorf("database connection not available")
 	}
 
-	// Generate embedding for the query
+	// If no embedding service, fall back to full-text search (graceful degradation)
 	if m.embeddingService == nil {
-		return nil, fmt.Errorf("embedding service is required for semantic search")
+		return m.SearchFTS(ctx, query, limit, sessionID, nil)
 	}
 
+	// Generate embedding for the query
 	embedding, err := m.embeddingService.GenerateEmbedding(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
+		// If embedding generation fails, fall back to FTS
+		fmt.Printf("ZeroClaw: WARNING - Embedding generation failed, falling back to FTS: %v\n", err)
+		return m.SearchFTS(ctx, query, limit, sessionID, nil)
 	}
 
 	return m.RecallWithEmbedding(ctx, embedding, limit, sessionID)

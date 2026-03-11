@@ -58,7 +58,15 @@ func init() {
 
 	// Initialize Provider (OpenAI-compatible)
 	prov = providers.NewOpenAIProvider()
-	log.Printf("ZeroClaw: Provider initialized (model: %s)", os.Getenv("OPENAI_MODEL"))
+	log.Printf("ZeroClaw: Provider initialized (model: %s, base_url: %s)", os.Getenv("OPENAI_MODEL"), os.Getenv("OPENAI_BASE_URL"))
+
+	// Inject embedding service into memory backend for vector search
+	if memBackend, ok := mem.(*memory.SupabaseMemory); ok && memBackend != nil {
+		if embSvc, ok := prov.(core.EmbeddingService); ok {
+			memBackend.SetEmbeddingService(embSvc)
+			log.Println("ZeroClaw: Embedding service injected into memory backend")
+		}
+	}
 
 	// Initialize Tools
 	toolz = []core.Tool{
@@ -132,7 +140,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			respondJSON(w, v, http.StatusOK)
 			// For Discord, we need to send followup after ACK
 			if incomingMsg != nil {
-				go processAndRespond(ctx, incomingMsg, responseChannel, responseRecipient)
+				processAndRespond(ctx, incomingMsg, responseChannel, responseRecipient)
 			}
 			return
 		case string:
