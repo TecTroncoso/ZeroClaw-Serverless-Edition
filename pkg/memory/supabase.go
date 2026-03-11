@@ -72,8 +72,8 @@ func NewSupabaseMemory(cfg *SupabaseConfig) (*SupabaseMemory, error) {
 
 	// Verify connection with retry logic for serverless cold starts
 	var pingErr error
-	for i := 0; i < 3; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		pingErr = db.PingContext(ctx)
 		cancel()
 		if pingErr == nil {
@@ -84,6 +84,7 @@ func NewSupabaseMemory(cfg *SupabaseConfig) (*SupabaseMemory, error) {
 	if pingErr != nil {
 		// Return nil memory backend instead of error - allows graceful degradation
 		fmt.Printf("ZeroClaw: WARNING - Database connection failed, memory features disabled: %v\n", pingErr)
+		db.Close() // Clean up the failed connection
 		return nil, nil
 	}
 

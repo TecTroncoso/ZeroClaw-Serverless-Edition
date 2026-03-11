@@ -74,7 +74,7 @@ func NewOpenAIProviderWithConfig(cfg *OpenAIConfig) *OpenAIProvider {
 		}
 	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 60 * time.Second
+		cfg.Timeout = 50 * time.Second
 	}
 
 	// Normalize base URL (remove trailing slash)

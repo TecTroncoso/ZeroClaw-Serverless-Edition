@@ -288,6 +288,9 @@ func (a *Agent) recallMemory(ctx context.Context, query string) ([]core.MemoryEn
 
 // storeConversation saves to memory asynchronously.
 func (a *Agent) storeConversation(userMessage, assistantResponse string) {
+	if a.memory == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
