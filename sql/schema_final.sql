@@ -221,11 +221,11 @@ BEGIN
         me.category,
         me.timestamp,
         me.session_id,
-        rc.rrf_score AS score,
+        rc.rrf_score::FLOAT AS score,
         me.metadata,
-        rc.semantic_score,
-        rc.fts_score,
-        rc.rrf_score
+        rc.semantic_score::FLOAT,
+        rc.fts_score::FLOAT,
+        rc.rrf_score::FLOAT
     FROM rrf_calc rc
     JOIN memory_entries me ON rc.id = me.id
     ORDER BY rc.rrf_score DESC

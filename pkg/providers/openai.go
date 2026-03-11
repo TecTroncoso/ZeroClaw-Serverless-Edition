@@ -164,6 +164,10 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 
 	resp, err := p.doRequest(ctx, "/embeddings", reqBody)
 	if err != nil {
+		// Specific handling for Cerebras which does not support embeddings (returns 404)
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
+			return nil, fmt.Errorf("provider does not support embeddings (404 Not Found) - ignoring vector search")
+		}
 		return nil, err
 	}
 
