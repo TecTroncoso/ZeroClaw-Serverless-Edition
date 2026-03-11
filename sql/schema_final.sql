@@ -267,7 +267,7 @@ BEGIN
         ts_rank_cd(
             to_tsvector('english', me.content),
             websearch_to_tsquery('english', query_text)
-        ) AS score,
+        )::FLOAT AS score,
         me.metadata
     FROM memory_entries me
     WHERE to_tsvector('english', me.content) @@ websearch_to_tsquery('english', query_text)

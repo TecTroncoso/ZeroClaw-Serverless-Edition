@@ -270,33 +270,64 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 	}
 
 	url := p.baseURL + endpoint
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	
+	maxRetries := 3
+	var lastErr error
+	var respBody []byte
+	var statusCode int
+
+	for i := 0; i <= maxRetries; i++ {
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+		// Add OpenRouter-specific headers if using OpenRouter
+		if strings.Contains(p.baseURL, "openrouter.ai") {
+			req.Header.Set("HTTP-Referer", "https://zeroclaw.dev")
+			req.Header.Set("X-Title", "ZeroClaw")
+		}
+
+		resp, err := p.httpClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("HTTP request failed: %w", err)
+			// Network error, usually safe to retry depending on context
+			if i < maxRetries {
+				sleepTime := time.Duration(1<<i) * time.Second
+				fmt.Printf("ZeroClaw Provider: Request failed (%v), retrying in %v...\n", err, sleepTime)
+				time.Sleep(sleepTime)
+			}
+			continue
+		}
+
+		respBody, err = io.ReadAll(resp.Body)
+		statusCode = resp.StatusCode
+		resp.Body.Close()
+
+		if err != nil {
+			lastErr = fmt.Errorf("failed to read response: %w", err)
+			continue
+		}
+
+		// Success or non-retryable error
+		if statusCode != http.StatusTooManyRequests && statusCode < 500 {
+			break
+		}
+		
+		lastErr = fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
+		if i < maxRetries {
+			// Exponential backoff
+			sleepTime := time.Duration(1<<i) * time.Second
+			fmt.Printf("ZeroClaw Provider: Rate limited or server error (%d), retrying in %v...\n", statusCode, sleepTime)
+			time.Sleep(sleepTime)
+		}
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
-
-	// Add OpenRouter-specific headers if using OpenRouter
-	if strings.Contains(p.baseURL, "openrouter.ai") {
-		req.Header.Set("HTTP-Referer", "https://zeroclaw.dev")
-		req.Header.Set("X-Title", "ZeroClaw")
-	}
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	if statusCode >= 400 {
+		return nil, lastErr
 	}
 
 	return respBody, nil
