@@ -68,6 +68,8 @@ Un solo provider, infinitas posibilidades. Compatible con **cualquier API OpenAI
 | OpenRouter | `https://openrouter.ai/api/v1` | openai/gpt-4o-mini |
 | xAI | `https://api.x.ai/v1` | grok-beta |
 | Together AI | `https://api.together.xyz/v1` | meta-llama/Llama-3-8b |
+| Fireworks AI | `https://api.fireworks.ai/inference/v1` | accounts/fireworks/models/llama-v3-8b-chat |
+| Cerebras | `https://api.cerebras.ai/v1` | llama3.1-8b |
 
 ### 🛠️ Herramientas Serverless-Safe
 
@@ -177,6 +179,8 @@ zeroclaw-go/
 
 Una vez desplegado, configura los webhooks de cada plataforma:
 
+💡 **Nota sobre Auto-Detección:** ZeroClaw es capaz de auto-detectar de qué plataforma proviene el webhook. Si lo prefieres, puedes omitir el parámetro `?channel=...` en las siguientes URLs y configurar apuntando directamente al endpoint `/api/webhook`.
+
 #### 📱 Telegram
 
 ```
@@ -277,6 +281,9 @@ OPENAI_MODEL=grok-beta
 |----------|---------|-------------|
 | `SEARCH_API_KEY` | (vacío) | API key para Tavily/Brave |
 | `SEARCH_PROVIDER` | `duckduckgo` | Provider: `duckduckgo`, `tavily`, o `brave` |
+| `WEBFETCH_TIMEOUT` | `8` | Timeout en segundos para la herramienta WebFetch |
+| `WEBFETCH_MAX_CHARS` | `4000` | Máximo de caracteres a extraer en WebFetch |
+| `HTTPREQUEST_TIMEOUT` | `8` | Timeout en segundos para la herramienta HTTPRequest |
 
 ---
 
