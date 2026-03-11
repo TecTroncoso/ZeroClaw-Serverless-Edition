@@ -391,6 +391,7 @@ func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string,
 	// Build agent configuration
 	config := &agent.Config{
 		MaxIterations: 2,
+		Timeout:       50 * time.Second,
 		Temperature:   0.7,
 		Model:         os.Getenv("OPENAI_MODEL"),
 	}
