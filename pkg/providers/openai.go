@@ -318,19 +318,23 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 
 		// Success or non-retryable error
 		if statusCode != http.StatusTooManyRequests && statusCode < 500 {
-			break
+			if len(respBody) > 0 {
+				break
+			}
+			lastErr = fmt.Errorf("API error (status %d): empty response body from provider", statusCode)
+		} else {
+			lastErr = fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
 		}
 		
-		lastErr = fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
 		if i < maxRetries {
 			// Exponential backoff
 			sleepTime := time.Duration(1<<i) * time.Second
-			fmt.Printf("ZeroClaw Provider: Rate limited or server error (%d), retrying in %v...\n", statusCode, sleepTime)
+			fmt.Printf("ZeroClaw Provider: Rate limited, server error or empty response (%d), retrying in %v...\n", statusCode, sleepTime)
 			time.Sleep(sleepTime)
 		}
 	}
 
-	if statusCode >= 400 {
+	if statusCode >= 400 || len(respBody) == 0 {
 		return nil, lastErr
 	}
 
