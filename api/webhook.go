@@ -64,12 +64,17 @@ func init() {
 	var embProvider core.EmbeddingService
 	embAPIKey := os.Getenv("EMBEDDING_API_KEY")
 	if embAPIKey != "" {
+		embModel := os.Getenv("EMBEDDING_MODEL")
+		if embModel == "" {
+			embModel = "text-embedding-3-small"
+		}
 		embConfig := &providers.OpenAIConfig{
 			APIKey:  embAPIKey,
 			BaseURL: os.Getenv("EMBEDDING_BASE_URL"),
+			Model:   embModel,
 		}
 		embProvider = providers.NewOpenAIProviderWithConfig(embConfig)
-		log.Printf("ZeroClaw: Embedding Provider initialized (base_url: %s)", embConfig.BaseURL)
+		log.Printf("ZeroClaw: Embedding Provider initialized (model: %s, base_url: %s)", embModel, embConfig.BaseURL)
 	} else {
 		// Fallback to Chat Provider if embedding variables are not set
 		if svc, ok := prov.(core.EmbeddingService); ok {

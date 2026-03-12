@@ -10,19 +10,19 @@
 -- ============================================================================
 -- Eliminamos TODAS las versiones existentes para evitar errores de ambigüedad
 
-DROP FUNCTION IF EXISTS hybrid_search_memories(vector(1536), text, int, text, float, float, int);
-DROP FUNCTION IF EXISTS hybrid_search_memories(vector(1536), text, int, text, float, float);
-DROP FUNCTION IF EXISTS hybrid_search_memories(vector(1536), text, int, text, float);
-DROP FUNCTION IF EXISTS hybrid_search_memories(vector(1536), text, int, text);
-DROP FUNCTION IF EXISTS hybrid_search_memories(text, vector(1536), int, float, text, text);
-DROP FUNCTION IF EXISTS hybrid_search_memories(text, vector(1536), int, float, text);
+DROP FUNCTION IF EXISTS hybrid_search_memories(vector(2048), text, int, text, float, float, int);
+DROP FUNCTION IF EXISTS hybrid_search_memories(vector(2048), text, int, text, float, float);
+DROP FUNCTION IF EXISTS hybrid_search_memories(vector(2048), text, int, text, float);
+DROP FUNCTION IF EXISTS hybrid_search_memories(vector(2048), text, int, text);
+DROP FUNCTION IF EXISTS hybrid_search_memories(text, vector(2048), int, float, text, text);
+DROP FUNCTION IF EXISTS hybrid_search_memories(text, vector(2048), int, float, text);
 DROP FUNCTION IF EXISTS hybrid_search_memories(vector, text, int, text, float, float, int);
-DROP FUNCTION IF EXISTS hybrid_search_memories_weighted(vector(1536), text, int, text, float, float);
-DROP FUNCTION IF EXISTS hybrid_search_memories_weighted(vector(1536), text, int, text, float);
-DROP FUNCTION IF EXISTS search_memories(vector(1536), float, int, text, text);
+DROP FUNCTION IF EXISTS hybrid_search_memories_weighted(vector(2048), text, int, text, float, float);
+DROP FUNCTION IF EXISTS hybrid_search_memories_weighted(vector(2048), text, int, text, float);
+DROP FUNCTION IF EXISTS search_memories(vector(2048), float, int, text, text);
 DROP FUNCTION IF EXISTS search_memories_fts(text, int, text, text);
 DROP FUNCTION IF EXISTS count_memories(text, text);
-DROP FUNCTION IF EXISTS upsert_memory(text, text, text, text, vector(1536), jsonb);
+DROP FUNCTION IF EXISTS upsert_memory(text, text, text, text, vector(2048), jsonb);
 DROP FUNCTION IF EXISTS delete_memory(text);
 
 -- ============================================================================
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS memory_entries (
     category TEXT NOT NULL DEFAULT 'conversation',
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     session_id TEXT,
-    embedding vector(1536),
+    embedding vector(2048),
     score FLOAT,
     metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -93,7 +93,7 @@ EXECUTE FUNCTION update_updated_at_column();
 -- Parámetros: query_embedding, match_threshold, match_count, filter_category, filter_session_id
 
 CREATE OR REPLACE FUNCTION search_memories(
-    query_embedding vector(1536),
+    query_embedding vector(2048),
     match_threshold FLOAT DEFAULT 0.7,
     match_count INT DEFAULT 10,
     filter_category TEXT DEFAULT NULL,
@@ -135,7 +135,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- Usada por: RecallHybrid() y RecallHybridWithConfig() en Go
 -- Firma exacta requerida por Go (7 parámetros):
---   $1: query_embedding vector(1536)
+--   $1: query_embedding vector(2048)
 --   $2: query_text TEXT
 --   $3: match_count INT
 --   $4: p_session_id TEXT
@@ -144,7 +144,7 @@ $$ LANGUAGE plpgsql;
 --   $7: rrf_k INT
 
 CREATE OR REPLACE FUNCTION hybrid_search_memories(
-    query_embedding vector(1536),
+    query_embedding vector(2048),
     query_text TEXT,
     match_count INT DEFAULT 10,
     p_session_id TEXT DEFAULT NULL,

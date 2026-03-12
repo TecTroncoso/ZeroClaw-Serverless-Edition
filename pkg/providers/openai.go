@@ -158,7 +158,7 @@ func (p *OpenAIProvider) SupportsVision() bool {
 // GetEmbedding generates an embedding for text.
 func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float32, error) {
 	reqBody := map[string]interface{}{
-		"model": "text-embedding-3-small",
+		"model": p.model,
 		"input": text,
 	}
 
@@ -212,9 +212,9 @@ func (p *OpenAIProvider) GenerateEmbeddings(ctx context.Context, texts []string)
 	return results, nil
 }
 
-// Dimension implements core.EmbeddingService. Returns 1536 for text-embedding-3-small.
+// Dimension implements core.EmbeddingService. Returns 2048 for nvidia/llama-nemotron-embed-vl-1b-v2:free.
 func (p *OpenAIProvider) Dimension() int {
-	return 1536
+	return 2048
 }
 
 // ============================================================================
