@@ -171,11 +171,27 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 		return nil, err
 	}
 
-	bodyStr := string(resp)
-	if len(bodyStr) > 500 {
-		bodyStr = bodyStr[:500] + "..."
+	// Log only essential info to avoid excessive debug output
+	if len(resp) > 0 {
+		// Log just the length and first few values to verify response structure
+		var tempResp struct {
+			Object string `json:"object"`
+			Data   []struct {
+				Object string    `json:"object"`
+				Embedding []float32 `json:"embedding"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(resp, &tempResp); err == nil && len(tempResp.Data) > 0 {
+			embLen := len(tempResp.Data[0].Embedding)
+			firstVals := tempResp.Data[0].Embedding
+			if len(firstVals) > 5 {
+				firstVals = firstVals[:5]
+			}
+			fmt.Printf("DEBUG: Provider response (embeddings), length: %d, first_vals: %v\n", embLen, firstVals)
+		} else {
+			fmt.Printf("DEBUG: Provider response (embeddings), raw length: %d\n", len(resp))
+		}
 	}
-	fmt.Printf("DEBUG: Provider response (embeddings), body: %s\n", bodyStr)
 
 	if len(resp) == 0 {
 		return nil, fmt.Errorf("empty response from provider")
