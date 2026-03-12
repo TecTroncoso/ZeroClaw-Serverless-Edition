@@ -282,7 +282,7 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 	baseURL := strings.TrimRight(p.baseURL, "/")
 	url := baseURL + endpoint
 	
-	maxRetries := 3
+	maxRetries := 5 // Increased for OpenRouter aggressive rate limits
 	var lastErr error
 	var respBody []byte
 	var statusCode int
@@ -334,8 +334,12 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 		}
 		
 		if i < maxRetries {
-			// Exponential backoff
-			sleepTime := time.Duration(1<<i) * time.Second
+			// Exponential backoff, more aggressive for 429 specifically
+			multiplier := 1
+			if statusCode == http.StatusTooManyRequests {
+				multiplier = 2
+			}
+			sleepTime := time.Duration(1<<i) * time.Second * time.Duration(multiplier)
 			fmt.Printf("ZeroClaw Provider: Rate limited, server error or empty response (%d), retrying in %v...\n", statusCode, sleepTime)
 			time.Sleep(sleepTime)
 		}
