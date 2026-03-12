@@ -171,6 +171,12 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 		return nil, err
 	}
 
+	bodyStr := string(resp)
+	if len(bodyStr) > 500 {
+		bodyStr = bodyStr[:500] + "..."
+	}
+	fmt.Printf("DEBUG: Provider response (embeddings), body: %s\n", bodyStr)
+
 	if len(resp) == 0 {
 		return nil, fmt.Errorf("empty response from provider")
 	}
@@ -273,7 +279,8 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := p.baseURL + endpoint
+	baseURL := strings.TrimRight(p.baseURL, "/")
+	url := baseURL + endpoint
 	
 	maxRetries := 3
 	var lastErr error

@@ -466,6 +466,7 @@ func DefaultHybridConfig() *HybridConfig {
 func (m *SupabaseMemory) RecallHybrid(ctx context.Context, queryText string, queryEmbedding []float32, limit int, sessionID *string) ([]core.MemoryEntry, error) {
 	// Validate inputs
 	if queryEmbedding == nil || len(queryEmbedding) == 0 {
+		fmt.Printf("DEBUG: queryEmbedding is empty or nil in RecallHybrid. Length: %d\n", len(queryEmbedding))
 		return nil, fmt.Errorf("query embedding is required for hybrid search")
 	}
 	if queryText == "" {
