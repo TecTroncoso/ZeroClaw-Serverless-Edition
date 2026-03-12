@@ -72,7 +72,24 @@ func (c *TelegramChannel) Send(recipient, message string) error {
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(respBody))
+		errBody := string(respBody)
+		if strings.Contains(errBody, "can't parse entities") {
+			// Fallback: Retry with empty ParseMode
+			payload["parse_mode"] = ""
+			retryBytes, _ := json.Marshal(payload)
+			retryResp, retryErr := c.httpClient.Post(url, "application/json", bytes.NewReader(retryBytes))
+			if retryErr != nil {
+				return fmt.Errorf("failed to retry send message: %w", retryErr)
+			}
+			defer retryResp.Body.Close()
+			
+			retryBody, _ := io.ReadAll(retryResp.Body)
+			if retryResp.StatusCode >= 400 {
+				return fmt.Errorf("telegram API error on retry (status %d): %s", retryResp.StatusCode, string(retryBody))
+			}
+			return nil
+		}
+		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, errBody)
 	}
 
 	return nil
@@ -110,7 +127,24 @@ func (c *TelegramChannel) SendWithKeyboard(recipient, message string, buttons []
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(respBody))
+		errBody := string(respBody)
+		if strings.Contains(errBody, "can't parse entities") {
+			// Fallback: Retry with empty ParseMode
+			payload["parse_mode"] = ""
+			retryBytes, _ := json.Marshal(payload)
+			retryResp, retryErr := c.httpClient.Post(url, "application/json", bytes.NewReader(retryBytes))
+			if retryErr != nil {
+				return fmt.Errorf("failed to retry send message: %w", retryErr)
+			}
+			defer retryResp.Body.Close()
+			
+			retryBody, _ := io.ReadAll(retryResp.Body)
+			if retryResp.StatusCode >= 400 {
+				return fmt.Errorf("telegram API error on retry (status %d): %s", retryResp.StatusCode, string(retryBody))
+			}
+			return nil
+		}
+		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, errBody)
 	}
 
 	return nil

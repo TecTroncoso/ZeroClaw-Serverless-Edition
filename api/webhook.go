@@ -56,14 +56,32 @@ func init() {
 		}
 	}
 
-	// Initialize Provider (OpenAI-compatible)
+	// Initialize Chat Provider
 	prov = providers.NewOpenAIProvider()
-	log.Printf("ZeroClaw: Provider initialized (model: %s, base_url: %s)", os.Getenv("OPENAI_MODEL"), os.Getenv("OPENAI_BASE_URL"))
+	log.Printf("ZeroClaw: Chat Provider initialized (model: %s, base_url: %s)", os.Getenv("OPENAI_MODEL"), os.Getenv("OPENAI_BASE_URL"))
+
+	// Initialize Embedding Provider
+	var embProvider core.EmbeddingService
+	embAPIKey := os.Getenv("EMBEDDING_API_KEY")
+	if embAPIKey != "" {
+		embConfig := &providers.OpenAIConfig{
+			APIKey:  embAPIKey,
+			BaseURL: os.Getenv("EMBEDDING_BASE_URL"),
+		}
+		embProvider = providers.NewOpenAIProviderWithConfig(embConfig)
+		log.Printf("ZeroClaw: Embedding Provider initialized (base_url: %s)", embConfig.BaseURL)
+	} else {
+		// Fallback to Chat Provider if embedding variables are not set
+		if svc, ok := prov.(core.EmbeddingService); ok {
+			embProvider = svc
+			log.Println("ZeroClaw: Embedding Provider defaulting to Chat Provider")
+		}
+	}
 
 	// Inject embedding service into memory backend for vector search
 	if memBackend, ok := mem.(*memory.SupabaseMemory); ok && memBackend != nil {
-		if embSvc, ok := prov.(core.EmbeddingService); ok {
-			memBackend.SetEmbeddingService(embSvc)
+		if embProvider != nil {
+			memBackend.SetEmbeddingService(embProvider)
 			log.Println("ZeroClaw: Embedding service injected into memory backend")
 		}
 	}

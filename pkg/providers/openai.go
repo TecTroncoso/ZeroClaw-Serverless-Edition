@@ -171,6 +171,10 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 		return nil, err
 	}
 
+	if len(resp) == 0 {
+		return nil, fmt.Errorf("empty response from provider")
+	}
+
 	// Parse embedding response
 	var embResp struct {
 		Data []struct {
