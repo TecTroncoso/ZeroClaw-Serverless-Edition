@@ -343,6 +343,10 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 
 // parseChatResponse parses the chat completion response.
 func (p *OpenAIProvider) parseChatResponse(body []byte) (*core.ChatResponse, error) {
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty response body from provider")
+	}
+
 	var resp struct {
 		Choices []struct {
 			Message struct {
