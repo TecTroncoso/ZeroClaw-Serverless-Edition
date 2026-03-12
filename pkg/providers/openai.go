@@ -189,11 +189,11 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 	}
 
 	if err := json.Unmarshal(resp, &embResp); err != nil {
-		return nil, fmt.Errorf("failed to parse embedding response: %w", err)
+		return nil, fmt.Errorf("failed to parse embedding response: %w - body: %s", err, string(resp))
 	}
 
-	if len(embResp.Data) == 0 {
-		return nil, fmt.Errorf("no embedding returned")
+	if len(embResp.Data) == 0 || len(embResp.Data[0].Embedding) == 0 {
+		return nil, fmt.Errorf("no embedding returned in valid JSON")
 	}
 
 	return embResp.Data[0].Embedding, nil
