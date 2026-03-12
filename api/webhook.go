@@ -224,6 +224,9 @@ func handleTelegram(body []byte) (*channels.IncomingMessage, channels.Channel, s
 	senderID := update.ExtractSenderID()
 	senderName := update.ExtractSenderName()
 
+	// Log the sessionID (based on Telegram user ID) for diagnostic purposes
+	log.Printf("ZeroClaw: Telegram sessionID=%s", senderID)
+
 	msg := &channels.IncomingMessage{
 		Channel:    "telegram",
 		SenderID:   senderID,

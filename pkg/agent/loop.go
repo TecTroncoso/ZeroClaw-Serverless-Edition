@@ -127,6 +127,9 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 		fmt.Printf("[agent] memory recall error: %v\n", err)
 	}
 	result.MemoriesFound = len(memories)
+	
+	// Debug log for memory injection
+	log.Printf("DEBUG: Injecting %d memories into prompt context", len(memories))
 
 	// STEP 2: Build system prompt
 	systemPrompt := a.buildPrompt(memories)

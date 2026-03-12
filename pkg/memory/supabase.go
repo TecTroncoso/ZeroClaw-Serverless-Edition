@@ -117,6 +117,9 @@ func (m *SupabaseMemory) Store(ctx context.Context, key, content string, categor
 		return fmt.Errorf("database connection not available")
 	}
 
+	// Debug log for memory storage
+	log.Printf("DEBUG: Storing memory key=%s, content=%s", key, content)
+
 	// If we have an embedding service, compute the embedding
 	if m.embeddingService != nil {
 		embedding, err := m.embeddingService.GenerateEmbedding(ctx, content)
@@ -517,6 +520,9 @@ func (m *SupabaseMemory) RecallHybrid(ctx context.Context, queryText string, que
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating hybrid search results: %w", err)
 	}
+
+	// Debug log for hybrid search results
+	log.Printf("DEBUG: RecallHybrid found %d memories for session %s", len(entries), func() string { if sessionID != nil { return *sessionID } else { return "nil" } }())
 
 	return entries, nil
 }
