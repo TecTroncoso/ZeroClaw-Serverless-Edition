@@ -211,6 +211,9 @@ type Memory interface {
 	// Get retrieves a specific memory by key.
 	Get(ctx context.Context, key string) (*MemoryEntry, error)
 
+	// GetRecentHistory retrieves the most recent N conversation turns for a session.
+	GetRecentHistory(ctx context.Context, sessionID *string, limit int) ([]MemoryEntry, error)
+
 	// List returns all memory keys, optionally filtered by category and session.
 	List(ctx context.Context, category *MemoryCategory, sessionID *string) ([]MemoryEntry, error)
 

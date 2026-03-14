@@ -99,11 +99,11 @@ func getEnvOrDefault(key, defaultVal string) string {
 // SYSTEM PROMPT BUILDER
 // ============================================================================
 
-// SystemPromptBuilder constructs complete system prompts.
 type SystemPromptBuilder struct {
 	identity  *IdentityConfig
 	tools     []ToolSpec
 	memories  []MemoryEntry
+	history   []MemoryEntry
 	extraCtx  string
 }
 
@@ -124,6 +124,12 @@ func (b *SystemPromptBuilder) WithMemories(memories []MemoryEntry) *SystemPrompt
 	return b
 }
 
+// WithHistory adds chronological conversation history to the prompt.
+func (b *SystemPromptBuilder) WithHistory(history []MemoryEntry) *SystemPromptBuilder {
+	b.history = history
+	return b
+}
+
 // WithExtraContext adds additional context.
 func (b *SystemPromptBuilder) WithExtraContext(ctx string) *SystemPromptBuilder {
 	b.extraCtx = ctx
@@ -138,14 +144,42 @@ func (b *SystemPromptBuilder) Build() string {
 	sb.WriteString(b.identity.SystemPrompt)
 	sb.WriteString("\n\n")
 
-	// 2. Memory context (if any)
-	if len(b.memories) > 0 {
-		sb.WriteString("## Relevant Context\n\n")
-		sb.WriteString("The following context from previous conversations may be relevant:\n\n")
-		for i, mem := range b.memories {
-			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, mem.Content))
+	// 2. Recent Conversation History (if any)
+	if len(b.history) > 0 {
+		sb.WriteString("## Recent Conversation History\n\n")
+		sb.WriteString("These are the most recent messages in the current conversation:\n\n")
+		for _, mem := range b.history {
+			role := "User"
+			if strings.HasSuffix(mem.Key, "_resp") {
+				role = b.identity.AgentName
+			}
+			sb.WriteString(fmt.Sprintf("**%s**: %s\n\n", role, mem.Content))
 		}
-		sb.WriteString("\n")
+	}
+
+	// 3. Memory context (semantic search results)
+	if len(b.memories) > 0 {
+		// Filter out memories that are already in the recent history to avoid duplication
+		var uniqueMemories []MemoryEntry
+		historyKeys := make(map[string]bool)
+		for _, h := range b.history {
+			historyKeys[h.Key] = true
+		}
+		
+		for _, mem := range b.memories {
+			if !historyKeys[mem.Key] {
+				uniqueMemories = append(uniqueMemories, mem)
+			}
+		}
+
+		if len(uniqueMemories) > 0 {
+			sb.WriteString("## Relevant Past Context\n\n")
+			sb.WriteString("The following context from previous conversations may be semantically relevant:\n\n")
+			for i, mem := range uniqueMemories {
+				sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, mem.Content))
+			}
+			sb.WriteString("\n")
+		}
 	}
 
 	// 3. Extra context (if any)

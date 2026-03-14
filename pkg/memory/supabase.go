@@ -277,6 +277,48 @@ func (m *SupabaseMemory) Get(ctx context.Context, key string) (*core.MemoryEntry
 	return entry, nil
 }
 
+// GetRecentHistory retrieves the most recent N conversation turns for a session.
+func (m *SupabaseMemory) GetRecentHistory(ctx context.Context, sessionID *string, limit int) ([]core.MemoryEntry, error) {
+	if sessionID == nil || *sessionID == "" {
+		return nil, nil // Cannot fetch history without a session
+	}
+
+	query := `
+		SELECT id, key, content, category, timestamp, session_id, NULL as score, metadata
+		FROM memory_entries
+		WHERE session_id = $1 AND category = 'conversation'
+		ORDER BY timestamp DESC
+		LIMIT $2
+	`
+
+	rows, err := m.db.QueryContext(ctx, query, *sessionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent history: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []core.MemoryEntry
+	for rows.Next() {
+		entry, err := m.scanMemoryEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		// Supabase uses 1536 by default in the struct but we are omitting embedding here anyway.
+		entries = append(entries, *entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating history entries: %w", err)
+	}
+
+	// Reverse the entries so they are in chronological order (oldest first)
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+
+	return entries, nil
+}
+
 // List returns all memory entries, optionally filtered by category and session.
 func (m *SupabaseMemory) List(ctx context.Context, category *core.MemoryCategory, sessionID *string) ([]core.MemoryEntry, error) {
 	query := `

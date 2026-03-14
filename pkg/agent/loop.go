@@ -132,10 +132,22 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 	// Debug log for memory injection
 	log.Printf("DEBUG: Injecting %d memories into prompt context", len(memories))
 
-	// STEP 2: Build system prompt
-	systemPrompt := a.buildPrompt(memories)
+	// STEP 2: Retrieve recent history (last 25 messages)
+	var recentHistory []core.MemoryEntry
+	if a.memory != nil && a.config.SessionID != "" {
+		history, err := a.memory.GetRecentHistory(ctx, &a.config.SessionID, 25)
+		if err != nil {
+			fmt.Printf("[agent] history retrieval error: %v\n", err)
+		} else {
+			recentHistory = history
+			log.Printf("DEBUG: Found %d recent history messages", len(recentHistory))
+		}
+	}
 
-	// STEP 3: Run tool-calling loop
+	// STEP 3: Build system prompt
+	systemPrompt := a.buildPrompt(memories, recentHistory)
+
+	// STEP 4: Run tool-calling loop
 	response, iterations, toolCalls, err := a.runLoop(ctx, systemPrompt, message)
 	if err != nil {
 		return nil, fmt.Errorf("agent loop failed: %w", err)
@@ -145,7 +157,7 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 	result.Iterations = iterations
 	result.ToolCalls = toolCalls
 
-	// STEP 4: Store conversation (synchronous - required for serverless)
+	// STEP 5: Store conversation (synchronous - required for serverless)
 	if len(message) >= MinMessageCharsForMemory {
 		a.storeConversation(message, response)
 	}
@@ -319,9 +331,10 @@ func (a *Agent) storeConversation(userMessage, assistantResponse string) {
 // ============================================================================
 
 // buildPrompt constructs the system prompt.
-func (a *Agent) buildPrompt(memories []core.MemoryEntry) string {
+func (a *Agent) buildPrompt(memories []core.MemoryEntry, history []core.MemoryEntry) string {
 	return core.NewSystemPromptBuilder(a.identity).
 		WithTools(a.getToolSpecs()).
+		WithHistory(history).
 		WithMemories(memories).
 		Build()
 }
