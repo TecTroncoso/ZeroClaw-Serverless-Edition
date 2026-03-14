@@ -303,11 +303,15 @@ func (a *Agent) storeConversation(userMessage, assistantResponse string) {
 
 	// Store user message
 	userKey := fmt.Sprintf("conv_%s_%d", sessionID, timestamp)
-	a.memory.Store(ctx, userKey, userMessage, core.MemoryCategoryConversation, &sessionID)
+	if err := a.memory.Store(ctx, userKey, userMessage, core.MemoryCategoryConversation, &sessionID); err != nil {
+		log.Printf("[agent] WARNING - failed to store user memory: %v", err)
+	}
 
 	// Store assistant response
 	assistantKey := fmt.Sprintf("conv_%s_%d_resp", sessionID, timestamp)
-	a.memory.Store(ctx, assistantKey, assistantResponse, core.MemoryCategoryConversation, &sessionID)
+	if err := a.memory.Store(ctx, assistantKey, assistantResponse, core.MemoryCategoryConversation, &sessionID); err != nil {
+		log.Printf("[agent] WARNING - failed to store assistant memory: %v", err)
+	}
 }
 
 // ============================================================================

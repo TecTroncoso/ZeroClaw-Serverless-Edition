@@ -420,6 +420,7 @@ func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string,
 		Timeout:       50 * time.Second,
 		Temperature:   0.7,
 		Model:         os.Getenv("OPENAI_MODEL"),
+		SessionID:     msg.SenderID,
 	}
 
 	// Create agent

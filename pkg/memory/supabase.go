@@ -233,6 +233,7 @@ func (m *SupabaseMemory) RecallWithEmbedding(ctx context.Context, embedding []fl
 		sessionIDVal = *sessionID
 	}
 
+	log.Printf("DEBUG: RecallWithEmbedding session_id=%q, limit=%d, embedding_len=%d", func() string { if sessionID != nil { return *sessionID } else { return "<nil>" } }(), limit, len(embedding))
 	rows, err := m.db.QueryContext(ctx, query, embeddingStr, limit, sessionIDVal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search memories: %w", err)
@@ -252,6 +253,7 @@ func (m *SupabaseMemory) RecallWithEmbedding(ctx context.Context, embedding []fl
 		return nil, fmt.Errorf("error iterating memory entries: %w", err)
 	}
 
+	log.Printf("DEBUG: RecallWithEmbedding found %d entries", len(entries))
 	return entries, nil
 }
 
