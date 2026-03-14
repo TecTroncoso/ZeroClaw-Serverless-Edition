@@ -362,6 +362,9 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 	}
 
 	if statusCode >= 400 || len(respBody) == 0 {
+		if lastErr == nil {
+			lastErr = fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
+		}
 		return nil, lastErr
 	}
 
