@@ -145,10 +145,10 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 	}
 
 	// STEP 3: Build system prompt
-	systemPrompt := a.buildPrompt(memories, recentHistory)
+	systemPrompt := a.buildPrompt(memories)
 
 	// STEP 4: Run tool-calling loop
-	response, iterations, toolCalls, err := a.runLoop(ctx, systemPrompt, message)
+	response, iterations, toolCalls, err := a.runLoop(ctx, systemPrompt, message, recentHistory)
 	if err != nil {
 		return nil, fmt.Errorf("agent loop failed: %w", err)
 	}
@@ -170,12 +170,23 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 // ============================================================================
 
 // runLoop executes the iterative tool-calling loop.
-func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string) (string, int, []string, error) {
+func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, history []core.MemoryEntry) (string, int, []string, error) {
 	// Build initial messages
 	messages := []core.ChatMessage{
 		core.NewSystemMessage(systemPrompt),
-		core.NewUserMessage(userMessage),
 	}
+
+	// Add recent history messages
+	for _, mem := range history {
+		if strings.HasSuffix(mem.Key, "_resp") {
+			messages = append(messages, core.NewAssistantMessage(mem.Content))
+		} else {
+			messages = append(messages, core.NewUserMessage(mem.Content))
+		}
+	}
+
+	// Add the current user message
+	messages = append(messages, core.NewUserMessage(userMessage))
 
 	// Get tool specs for provider
 	toolSpecs := a.getToolSpecs()
@@ -331,10 +342,9 @@ func (a *Agent) storeConversation(userMessage, assistantResponse string) {
 // ============================================================================
 
 // buildPrompt constructs the system prompt.
-func (a *Agent) buildPrompt(memories []core.MemoryEntry, history []core.MemoryEntry) string {
+func (a *Agent) buildPrompt(memories []core.MemoryEntry) string {
 	return core.NewSystemPromptBuilder(a.identity).
 		WithTools(a.getToolSpecs()).
-		WithHistory(history).
 		WithMemories(memories).
 		Build()
 }
