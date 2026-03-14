@@ -58,13 +58,9 @@ CREATE INDEX IF NOT EXISTS idx_memory_entries_category ON memory_entries(categor
 CREATE INDEX IF NOT EXISTS idx_memory_entries_session_id ON memory_entries(session_id);
 CREATE INDEX IF NOT EXISTS idx_memory_entries_timestamp ON memory_entries(timestamp DESC);
 
--- Índice HNSW para búsqueda vectorial (similitud semántica)
-CREATE INDEX IF NOT EXISTS idx_memory_entries_embedding_hnsw
-ON memory_entries
-USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 64);
-
--- Índice GIN para Full-Text Search
+-- Nota: No se crea índice vectorial porque pgvector en Supabase limita
+-- HNSW e IVFFlat a 2000 dimensiones, y el modelo NVIDIA genera 2048.
+-- La búsqueda secuencial (sin índice) es suficiente para <100k filas.
 CREATE INDEX IF NOT EXISTS idx_memory_entries_content_fts
 ON memory_entries USING GIN (to_tsvector('english', content));
 

@@ -47,7 +47,7 @@ El sistema de memoria combina lo mejor de dos mundos usando **Reciprocal Rank Fu
 ```sql
 -- La función hybrid_search_memories combina ambos métodos
 SELECT * FROM hybrid_search_memories(
-    embedding,      -- $1: Vector de búsqueda (1536 dims)
+    embedding,      -- $1: Vector de búsqueda (2048 dims)
     'query text',   -- $2: Texto para FTS
     10,             -- $3: Límite de resultados
     session_id,     -- $4: Filtrar por sesión
@@ -230,19 +230,38 @@ https://<TU_DOMINIO>/api/webhook?channel=whatsapp
 | Variable | Descripción | Ejemplo |
 |----------|-------------|---------|
 | `SUPABASE_DB_URL` | URI de conexión PostgreSQL (Transaction mode) | `postgresql://postgres.xxx:pass@host:6543/postgres?sslmode=require` |
-| `OPENAI_API_KEY` | Clave de API del provider | `sk-proj-xxx` |
+| `OPENAI_API_KEY` | Clave de API del provider de chat | `sk-proj-xxx` |
 
-### 🎛️ Provider (Opcionales)
+### 🎛️ Provider de Chat (Opcionales)
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | URL base del provider |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Modelo a usar |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | URL base del provider de chat |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Modelo a usar para respuestas |
+
+### 🧠 Provider de Embeddings (Opcionales)
+
+Permiten usar un provider separado para generar embeddings. Si no se configuran, se usa el provider de chat como fallback.
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `EMBEDDING_API_KEY` | (usa `OPENAI_API_KEY`) | API key del provider de embeddings |
+| `EMBEDDING_BASE_URL` | `https://api.openai.com/v1` | URL base del provider de embeddings |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Modelo de embeddings |
+
+> ⚠️ **NOTA**: El modelo de embeddings debe producir ≤2048 dimensiones (límite de la columna `vector(2048)` en Supabase). pgvector no soporta índices HNSW/IVFFlat para >2000 dimensiones, por lo que se usa búsqueda secuencial.
 
 **Ejemplos de configuración de providers:**
 
 ```bash
+# Cerebras (ultra-rápido) + OpenRouter (embeddings gratuitos)
+OPENAI_API_KEY=csk-xxx
+OPENAI_BASE_URL=https://api.cerebras.ai/v1
+OPENAI_MODEL=qwen-3-235b-a22b-instruct-2507
+EMBEDDING_API_KEY=sk-or-xxx
+EMBEDDING_BASE_URL=https://openrouter.ai/api/v1
+EMBEDDING_MODEL=nvidia/llama-nemotron-embed-vl-1b-v2:free
+
 # Groq (rápido y barato)
 OPENAI_BASE_URL=https://api.groq.com/openai/v1
 OPENAI_MODEL=llama-3.1-8b-instant
@@ -301,7 +320,7 @@ memory_entries (
     category TEXT NOT NULL,
     timestamp TIMESTAMPTZ,
     session_id TEXT,
-    embedding vector(1536),
+    embedding vector(2048),
     score FLOAT,
     metadata JSONB,
     created_at TIMESTAMPTZ,
@@ -317,8 +336,9 @@ memory_entries (
 | `idx_memory_entries_category` | B-tree | Filtrado por categoría |
 | `idx_memory_entries_session_id` | B-tree | Filtrado por sesión |
 | `idx_memory_entries_timestamp` | B-tree | Ordenamiento temporal |
-| `idx_memory_entries_embedding_hnsw` | HNSW | Búsqueda vectorial |
 | `idx_memory_entries_content_fts` | GIN | Full-text search |
+
+> 💡 **Nota**: No se usa índice vectorial (HNSW/IVFFlat) porque pgvector en Supabase los limita a 2000 dimensiones. La búsqueda secuencial es eficiente para <100k filas.
 
 ### Funciones SQL
 
