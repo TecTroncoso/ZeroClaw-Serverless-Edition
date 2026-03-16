@@ -26,6 +26,9 @@ Los agentes de IA tradicionales requieren servidores permanentemente activos, lo
 	**Mejora de Memoria Conversacional a Corto Plazo**:
 	- Se introdujo la inyección del contexto conversacional reciente (los últimos mensajes formales del historial) además de la memoria semántica, permitiendo al bot seguir el hilo de referencias inmediatas como "réstale 30 al resultado anterior".
 	- Se redujo el límite mínimo de caracteres de los mensajes de 20 a 1 (`MinMessageCharsForMemory = 1`) para evitar que mensajes cortos (ej: "suma 3+3") sean ignorados de la persistencia de la conversación, logrando un bot mucho más preciso y contextual.
+
+	**Mejora de UX (Latencia Percibida)**:
+	- Se implementó un indicador de estado asíncrono ("Escribiendo...") nativo para Telegram. El webhook de Vercel ahora dispara esta señal en modo "fire-and-forget" inmediatamente al recibir el mensaje, mejorando drásticamente la percepción de latencia para el usuario final mientras el bot procesa su memoria y llámadas a LLM.
 	
 	---
 	

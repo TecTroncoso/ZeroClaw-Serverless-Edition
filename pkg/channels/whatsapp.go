@@ -170,6 +170,12 @@ type WhatsAppTemplateParam struct {
 	Text string `json:"text,omitempty"`
 }
 
+// SendTyping sends a typing indicator (Not natively supported in WhatsApp Cloud API).
+func (c *WhatsAppChannel) SendTyping(ctx context.Context, recipient string) error {
+	// WhatsApp Business Cloud API does not support "typing..." indicators.
+	return nil
+}
+
 // ============================================================================
 // HTTP REQUEST
 // ============================================================================

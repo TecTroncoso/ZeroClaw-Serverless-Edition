@@ -157,6 +157,44 @@ type TelegramButton struct {
 	URL          string `json:"url,omitempty"`
 }
 
+// SendTyping sends a "typing..." action to the Telegram chat.
+func (c *TelegramChannel) SendTyping(ctx context.Context, recipient string) error {
+	if c.botToken == "" {
+		return fmt.Errorf("TELEGRAM_BOT_TOKEN not configured")
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendChatAction", c.botToken)
+
+	payload := map[string]interface{}{
+		"chat_id": recipient,
+		"action":  "typing",
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send typing action: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		errBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(errBody))
+	}
+
+	return nil
+}
+
 // ============================================================================
 // TELEGRAM WEBHOOK PARSING
 // ============================================================================

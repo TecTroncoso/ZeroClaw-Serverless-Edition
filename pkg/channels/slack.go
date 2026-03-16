@@ -181,6 +181,14 @@ func (c *SlackChannel) SendEphemeral(channel, user, message string) error {
 	return nil
 }
 
+// SendTyping sends a typing indicator to a Slack channel.
+// Note: Slack does not have a formal API for typing indicators yet, it uses RTM which is deprecated.
+// Here we'll just mock it and do nothing to satisfy the interface.
+func (c *SlackChannel) SendTyping(ctx context.Context, recipient string) error {
+	// Not natively supported by Slack Web API (needs WebSocket/RTM or specific app configs)
+	return nil
+}
+
 // ============================================================================
 // SLACK BLOCK KIT TYPES
 // ============================================================================

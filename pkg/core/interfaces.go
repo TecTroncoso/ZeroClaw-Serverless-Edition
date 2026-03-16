@@ -266,6 +266,9 @@ type Channel interface {
 	// Send delivers a message through this channel.
 	Send(ctx context.Context, message *SendMessage) error
 
+	// SendTyping sends a typing indicator to the recipient.
+	SendTyping(ctx context.Context, recipient string) error
+
 	// HealthCheck verifies the channel is healthy.
 	HealthCheck(ctx context.Context) bool
 }

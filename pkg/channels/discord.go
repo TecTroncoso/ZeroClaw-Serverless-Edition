@@ -155,6 +155,34 @@ type DiscordEmbedAuthor struct {
 	IconURL string `json:"icon_url,omitempty"`
 }
 
+// SendTyping sends a typing indicator to a Discord channel.
+func (c *DiscordChannel) SendTyping(ctx context.Context, recipient string) error {
+	if c.botToken == "" {
+		return fmt.Errorf("DISCORD_BOT_TOKEN not configured")
+	}
+
+	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s/typing", recipient)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bot "+c.botToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send typing indicator: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("discord API error (status %d)", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // ============================================================================
 // DISCORD INTERACTIONS WEBHOOK PARSING
 // ============================================================================
