@@ -4,6 +4,7 @@ package channels
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
