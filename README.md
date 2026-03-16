@@ -19,9 +19,17 @@ Los agentes de IA tradicionales requieren servidores permanentemente activos, lo
 - 🔄 **Webhooks Nativos**: Cada plataforma entrega eventos directamente a tu función
 - 🧠 **Memoria Persistente**: Supabase + pgvector para recall semántico
 
----
-
-## ✨ Características Principales
+	--
+	
+	## 🆕 Novedades (Marzo 2026)
+	
+	**Mejora de Memoria Conversacional a Corto Plazo**:
+	- Se introdujo la inyección del contexto conversacional reciente (los últimos mensajes formales del historial) además de la memoria semántica, permitiendo al bot seguir el hilo de referencias inmediatas como "réstale 30 al resultado anterior".
+	- Se redujo el límite mínimo de caracteres de los mensajes de 20 a 1 (`MinMessageCharsForMemory = 1`) para evitar que mensajes cortos (ej: "suma 3+3") sean ignorados de la persistencia de la conversación, logrando un bot mucho más preciso y contextual.
+	
+	---
+	
+	## ✨ Características Principales
 
 ### 📡 Arquitectura Multi-Canal vía Webhook
 
