@@ -184,7 +184,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	response, err := processMessage(ctx, incomingMsg)
 	if err != nil {
 		log.Printf("ZeroClaw: ERROR - Processing failed: %v", err)
-		response = fmt.Sprintf("Sorry, I encountered an error: %v", err)
+		if strings.Contains(err.Error(), "context deadline exceeded") {
+			response = "⏳ Lo siento, mi cerebro tardó demasiado en procesar esto y se agotó el tiempo de espera. ¿Podrías intentar preguntarme de otra forma o más resumido?"
+		} else {
+			response = "⚠️ Ocurrió un error interno al conectar con mi red neuronal. Intenta en unos minutos."
+		}
 	}
 
 	// Send response through the channel
@@ -448,7 +452,11 @@ func processAndRespond(ctx context.Context, msg *channels.IncomingMessage, ch ch
 	response, err := processMessage(ctx, msg)
 	if err != nil {
 		log.Printf("ZeroClaw: ERROR - Async processing failed: %v", err)
-		response = fmt.Sprintf("Sorry, I encountered an error: %v", err)
+		if strings.Contains(err.Error(), "context deadline exceeded") {
+			response = "⏳ Lo siento, mi cerebro tardó demasiado en procesar esto y se agotó el tiempo de espera. ¿Podrías intentar preguntarme de otra forma o más resumido?"
+		} else {
+			response = "⚠️ Ocurrió un error interno al conectar con mi red neuronal. Intenta en unos minutos."
+		}
 	}
 
 	if ch != nil && recipient != "" {
