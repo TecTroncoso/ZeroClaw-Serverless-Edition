@@ -423,8 +423,15 @@ func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string,
 		SessionID:     msg.SenderID,
 	}
 
+	// Inject session-specific memory tool if memory is available
+	sessionTools := make([]core.Tool, len(toolz))
+	copy(sessionTools, toolz)
+	if mem != nil {
+		sessionTools = append(sessionTools, tools.NewMemoryStoreTool(mem, &config.SessionID))
+	}
+
 	// Create agent
-	ag := agent.NewAgent(mem, prov, toolz, config, ident)
+	ag := agent.NewAgent(mem, prov, sessionTools, config, ident)
 
 	// Run agent loop
 	result, err := ag.Run(ctx, msg.Text)

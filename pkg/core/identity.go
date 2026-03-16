@@ -4,6 +4,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -277,10 +278,7 @@ func ParseToolCall(format ToolCallFormat, raw string) (name string, args map[str
 
 // parseJSON is a simple JSON parser helper.
 func parseJSON(s string, v interface{}) error {
-	// Use encoding/json via import
-	importJSON := `encoding/json`
-	_ = importJSON // Placeholder - actual parsing done by json.Unmarshal
-	return nil
+	return json.Unmarshal([]byte(s), v)
 }
 
 // parseSimpleToolCall parses simple format: tool_name(arg1=val1)

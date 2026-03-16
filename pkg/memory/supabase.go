@@ -526,9 +526,12 @@ func (m *SupabaseMemory) RecallHybrid(ctx context.Context, queryText string, que
 
 	// Prepare query - matches hybrid_search_memories signature exactly
 	query := `
-		SELECT id, key, content, category, timestamp, session_id, score, metadata,
-			   semantic_score, fts_score, rrf_score
-		FROM hybrid_search_memories($1, $2, $3, $4, $5, $6, $7)
+		SELECT * FROM (
+			SELECT id, key, content, category, timestamp, session_id, score, metadata,
+				   semantic_score, fts_score, rrf_score
+			FROM hybrid_search_memories($1, $2, $3, $4, $5, $6, $7)
+		) sub
+		WHERE semantic_score > 0.7 OR fts_score > 0.1
 	`
 
 	embeddingStr := m.embeddingToPostgresArray(queryEmbedding)
@@ -588,9 +591,12 @@ func (m *SupabaseMemory) RecallHybridWithConfig(ctx context.Context, queryText s
 
 	// Prepare query - matches hybrid_search_memories signature exactly
 	query := `
-		SELECT id, key, content, category, timestamp, session_id, score, metadata,
-			   semantic_score, fts_score, rrf_score
-		FROM hybrid_search_memories($1, $2, $3, $4, $5, $6, $7)
+		SELECT * FROM (
+			SELECT id, key, content, category, timestamp, session_id, score, metadata,
+				   semantic_score, fts_score, rrf_score
+			FROM hybrid_search_memories($1, $2, $3, $4, $5, $6, $7)
+		) sub
+		WHERE semantic_score > 0.7 OR fts_score > 0.1
 	`
 
 	embeddingStr := m.embeddingToPostgresArray(queryEmbedding)
