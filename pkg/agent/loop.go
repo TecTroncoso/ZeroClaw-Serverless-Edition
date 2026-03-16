@@ -26,7 +26,8 @@ const (
 	DefaultTimeout = 45 * time.Second
 
 	// MinMessageCharsForMemory is minimum length to store in memory.
-	MinMessageCharsForMemory = 20
+	// Reduced to 1 to ensure short conversational queries (e.g., "suma 3+3") are retained.
+	MinMessageCharsForMemory = 1
 
 	// MaxToolOutputChars limits tool output to prevent context overflow.
 	MaxToolOutputChars = 2000
