@@ -253,10 +253,31 @@ func (p *OpenAIProvider) buildChatRequest(messages []core.ChatMessage, tools []c
 	// Convert messages to OpenAI format
 	apiMessages := make([]map[string]interface{}, len(messages))
 	for i, msg := range messages {
-		apiMessages[i] = map[string]interface{}{
+		apiMsg := map[string]interface{}{
 			"role":    msg.Role,
 			"content": msg.Content,
 		}
+		
+		if msg.ToolCallID != "" {
+			apiMsg["tool_call_id"] = msg.ToolCallID
+		}
+		
+		if len(msg.ToolCalls) > 0 {
+			toolCalls := make([]map[string]interface{}, len(msg.ToolCalls))
+			for j, tc := range msg.ToolCalls {
+				toolCalls[j] = map[string]interface{}{
+					"id":   tc.ID,
+					"type": "function",
+					"function": map[string]interface{}{
+						"name":      tc.Name,
+						"arguments": tc.Arguments,
+					},
+				}
+			}
+			apiMsg["tool_calls"] = toolCalls
+		}
+		
+		apiMessages[i] = apiMsg
 	}
 	reqBody["messages"] = apiMessages
 

@@ -57,6 +57,10 @@ type ChatMessage struct {
 	Role string `json:"role"`
 	// Content is the text content of the message.
 	Content string `json:"content"`
+	// ToolCallID identifies the tool execution (used for "tool" role).
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	// ToolCalls contains the list of tools the assistant asked to invoke.
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // NewSystemMessage creates a new system message.

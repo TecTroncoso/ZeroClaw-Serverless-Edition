@@ -219,16 +219,24 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 
 		// Add assistant message to history
 		assistantContent := resp.TextOrEmpty()
+		assistantMsg := core.NewAssistantMessage(assistantContent)
 		if len(resp.ToolCalls) > 0 {
-			assistantContent += "\n\n[Tool calls made]"
+			assistantMsg.ToolCalls = resp.ToolCalls
+			assistantMsg.Content += "\n\n[Tool calls made]"
 		}
-		messages = append(messages, core.NewAssistantMessage(assistantContent))
+		messages = append(messages, assistantMsg)
 
 		// Add tool results to history
-		for _, result := range toolResults {
+		for i, result := range toolResults {
+			toolCallID := ""
+			if i < len(resp.ToolCalls) {
+				toolCallID = resp.ToolCalls[i].ID
+			}
+			
 			messages = append(messages, core.ChatMessage{
-				Role:    "tool",
-				Content: result,
+				Role:       "tool",
+				Content:    result,
+				ToolCallID: toolCallID,
 			})
 		}
 
