@@ -180,6 +180,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send "typing..." indicator synchronously before freezing the serverless execution
+	if responseChannel != nil && responseRecipient != "" {
+		if err := responseChannel.SendTyping(ctx, responseRecipient); err != nil {
+			log.Printf("Warning: typing indicator failed: %v", err)
+		}
+	}
+
 	// Process message synchronously (Vercel freezes after response)
 	response, err := processMessage(ctx, incomingMsg)
 	if err != nil {
