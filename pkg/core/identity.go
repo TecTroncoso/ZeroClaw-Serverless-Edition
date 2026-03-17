@@ -178,6 +178,7 @@ func (b *SystemPromptBuilder) buildToolsSection() string {
 	}
 
 	sb.WriteString("\nAfter using a tool, you will receive its result and can continue reasoning.\n")
+	sb.WriteString("\nCRITICAL RULE FOR TOOL CALLING: When you need to use a tool (like web_search), you MUST output ONLY the native tool call or the JSON block. DO NOT say 'Un momento' or 'Voy a buscar'. Output NOTHING but the tool call. If you include conversational text along with a tool call, the system will break.\n")
 	return sb.String()
 }
 
