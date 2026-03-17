@@ -9,6 +9,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zeroclaw/zeroclaw-go/pkg/core"
@@ -256,49 +257,75 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 	return lastResponse, iterations, toolCallsMade, nil
 }
 
-// executeTools runs all requested tools.
+// executeTools runs all requested tools concurrently to minimize latency.
 func (a *Agent) executeTools(ctx context.Context, toolCalls []core.ToolCall) ([]string, []string) {
-	results := make([]string, 0, len(toolCalls))
-	calledTools := make([]string, 0, len(toolCalls))
+	start := time.Now()
+	
+	results := make([]string, len(toolCalls))
+	calledTools := make([]string, len(toolCalls))
 
-	for _, tc := range toolCalls {
-		calledTools = append(calledTools, tc.Name)
+	var wg sync.WaitGroup
+	var mu sync.Mutex // Ensure thread-safe writes to the results slice
 
-		// Find the tool
-		tool, exists := a.tools[tc.Name]
-		if !exists {
-			results = append(results, fmt.Sprintf("Error: Unknown tool '%s'", tc.Name))
-			continue
-		}
+	for i, tc := range toolCalls {
+		calledTools[i] = tc.Name
 
-		// Parse arguments
-		var args map[string]interface{}
-		if tc.Arguments != "" {
-			if err := json.Unmarshal([]byte(tc.Arguments), &args); err != nil {
-				results = append(results, fmt.Sprintf("Error: Invalid arguments: %v", err))
-				continue
+		wg.Add(1)
+		go func(idx int, call core.ToolCall) {
+			defer wg.Done()
+
+			var finalOutput string
+
+			// Find the tool
+			tool, exists := a.tools[call.Name]
+			if !exists {
+				finalOutput = fmt.Sprintf("Error: Unknown tool '%s'", call.Name)
+			} else {
+				// Parse arguments
+				var args map[string]interface{}
+				var parseErr error
+				if call.Arguments != "" {
+					if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+						parseErr = err
+					}
+				}
+
+				if parseErr != nil {
+					finalOutput = fmt.Sprintf("Error: Invalid arguments: %v", parseErr)
+				} else {
+					// Execute tool
+					result, err := tool.Execute(ctx, args)
+					if err != nil {
+						finalOutput = fmt.Sprintf("Error: %v", err)
+					} else {
+						// Format output
+						output := result.Output
+						if !result.Success && result.Error != nil {
+							output = fmt.Sprintf("Error: %s", *result.Error)
+						}
+
+						// Truncate if too long
+						if len(output) > MaxToolOutputChars {
+							output = output[:MaxToolOutputChars] + "...[truncated]"
+						}
+
+						finalOutput = output
+					}
+				}
 			}
-		}
 
-		// Execute tool
-		result, err := tool.Execute(ctx, args)
-		if err != nil {
-			results = append(results, fmt.Sprintf("Error: %v", err))
-			continue
-		}
+			// Safely write to the results slice using Mutex
+			mu.Lock()
+			results[idx] = finalOutput
+			mu.Unlock()
 
-		// Format output
-		output := result.Output
-		if !result.Success && result.Error != nil {
-			output = fmt.Sprintf("Error: %s", *result.Error)
-		}
+		}(i, tc)
+	}
 
-		// Truncate if too long
-		if len(output) > MaxToolOutputChars {
-			output = output[:MaxToolOutputChars] + "...[truncated]"
-		}
+	wg.Wait() // CRITICAL: Wait for all goroutines to finish before returning to the synchronous Vercel thread.
 
-		results = append(results, output)
+	if len(toolCalls) > 0 {
+		log.Printf("ZeroClaw: Parallel execution of %d tools took %v", len(toolCalls), time.Since(start))
 	}
 
 	return results, calledTools
