@@ -3,6 +3,7 @@
 package channels
 
 import (
+	"context"
 	"time"
 )
 
@@ -26,6 +27,9 @@ type Channel interface {
 	// - Slack: channel_id (e.g., "C1234567890")
 	// - WhatsApp: phone number (e.g., "34612345678")
 	Send(recipient, message string) error
+
+	// SendTyping sends a typing indicator to a recipient.
+	SendTyping(ctx context.Context, recipient string) error
 }
 
 // ============================================================================
