@@ -106,7 +106,17 @@ func (m *SupabaseMemory) Name() string {
 	return "supabase"
 }
 
-// Store saves a memory entry without computing an embedding.
+// Smart Chunking constants for memory storage.
+const (
+	// ChunkMaxLen is the maximum character length per chunk for embedding.
+	ChunkMaxLen = 500
+	// ChunkOverlap is the number of overlapping characters between consecutive chunks.
+	ChunkOverlap = 50
+)
+
+// Store saves a memory entry. If the content exceeds ChunkMaxLen, it is split
+// into semantically-aware chunks and each chunk is stored as a separate entry
+// with its own embedding, dramatically improving RAG recall precision.
 func (m *SupabaseMemory) Store(ctx context.Context, key, content string, category core.MemoryCategory, sessionID *string) error {
 	// Guard against nil receiver - critical for serverless environments
 	if m == nil {
@@ -118,9 +128,32 @@ func (m *SupabaseMemory) Store(ctx context.Context, key, content string, categor
 		return fmt.Errorf("database connection not available")
 	}
 
-	// Debug log for memory storage
-	log.Printf("DEBUG: Storing memory key=%s, content=%s", key, content)
+	// Smart Chunking: split long content into smaller chunks for better semantic search
+	chunks := ChunkText(content, ChunkMaxLen, ChunkOverlap)
+	if len(chunks) == 0 {
+		return nil // Nothing to store
+	}
 
+	// If only one chunk (short content), store normally with original key
+	if len(chunks) == 1 {
+		return m.storeSingleEntry(ctx, key, content, category, sessionID)
+	}
+
+	// Multiple chunks: store each with a suffixed key
+	log.Printf("ZeroClaw: Smart Chunking split content into %d chunks (key=%s)", len(chunks), key)
+	for i, chunk := range chunks {
+		chunkKey := fmt.Sprintf("%s_chunk_%d", key, i)
+		if err := m.storeSingleEntry(ctx, chunkKey, chunk, category, sessionID); err != nil {
+			log.Printf("Warning: failed to store chunk %d/%d for key=%s: %v", i+1, len(chunks), key, err)
+			// Continue storing remaining chunks even if one fails
+		}
+	}
+
+	return nil
+}
+
+// storeSingleEntry stores a single memory entry, computing an embedding if available.
+func (m *SupabaseMemory) storeSingleEntry(ctx context.Context, key, content string, category core.MemoryCategory, sessionID *string) error {
 	// If we have an embedding service, compute the embedding
 	if m.embeddingService != nil {
 		embedding, err := m.embeddingService.GenerateEmbedding(ctx, content)
