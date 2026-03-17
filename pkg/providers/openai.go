@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -467,6 +469,16 @@ func (p *OpenAIProvider) parseChatResponse(body []byte) (*core.ChatResponse, err
 		})
 	}
 
+	// Fallback: Check if the model outputted a manual tool call in the text
+	if len(toolCalls) == 0 && text != "" && strings.Contains(text, "\"tool\"") {
+		toolCalls = p.attemptExtractToolCallFromText(text)
+		if len(toolCalls) > 0 {
+			// Clear text to avoid logging tool JSON as assistant reply
+			log.Printf("DEBUG: Extracted text-based tool call: %s", toolCalls[0].Name)
+			text = ""
+		}
+	}
+
 	// Build response
 	result := &core.ChatResponse{
 		Text:      &text,
@@ -482,6 +494,50 @@ func (p *OpenAIProvider) parseChatResponse(body []byte) (*core.ChatResponse, err
 	}
 
 	return result, nil
+}
+
+// attemptExtractToolCallFromText tries to parse raw JSON from text if native tool calls failed.
+func (p *OpenAIProvider) attemptExtractToolCallFromText(text string) []core.ToolCall {
+	// Look for ```json ... ``` blocks
+	reJSONBlock := regexp.MustCompile(`(?s)\x60\x60\x60(?:json)?\s*(\{.*?\})\s*\x60\x60\x60`)
+	matches := reJSONBlock.FindStringSubmatch(text)
+	
+	jsonStr := ""
+	if len(matches) > 1 {
+		jsonStr = matches[1]
+	} else {
+		// Attempt to parse the whole text if it looks like JSON
+		trimmed := strings.TrimSpace(text)
+		if strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") {
+			jsonStr = trimmed
+		}
+	}
+
+	if jsonStr == "" {
+		return nil
+	}
+
+	// Parse it
+	var parsed struct {
+		Tool      string          `json:"tool"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+
+	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+		return nil
+	}
+
+	if parsed.Tool == "" {
+		return nil
+	}
+
+	return []core.ToolCall{
+		{
+			ID:        fmt.Sprintf("call_%d", time.Now().UnixNano()),
+			Name:      parsed.Tool,
+			Arguments: string(parsed.Arguments),
+		},
+	}
 }
 
 // ============================================================================
