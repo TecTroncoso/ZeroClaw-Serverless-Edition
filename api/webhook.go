@@ -433,7 +433,7 @@ func autoDetectChannel(body []byte) (*channels.IncomingMessage, channels.Channel
 func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string, error) {
 	// Build agent configuration
 	config := &agent.Config{
-		MaxIterations: 2,
+		MaxIterations: 5,
 		Timeout:       50 * time.Second,
 		Temperature:   0.7,
 		Model:         os.Getenv("OPENAI_MODEL"),

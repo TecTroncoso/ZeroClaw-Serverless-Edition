@@ -21,8 +21,9 @@ import (
 
 const (
 	// MaxToolIterations is the maximum tool-calling iterations.
-	// Set to 2 to avoid Vercel timeouts (10-60s).
-	MaxToolIterations = 2
+	// Set to 5 to allow multi-step tasks (memory + multiple searches)
+	// while staying within Vercel's 50s timeout (~5s per iteration).
+	MaxToolIterations = 5
 
 	// DefaultTimeout is the default timeout for the entire loop.
 	DefaultTimeout = 45 * time.Second
