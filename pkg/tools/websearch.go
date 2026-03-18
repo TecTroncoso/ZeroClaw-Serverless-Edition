@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -213,72 +214,68 @@ func (t *WebSearchTool) searchDuckDuckGo(ctx context.Context, query string, numR
 func (t *WebSearchTool) parseDuckDuckGoHTML(html string, maxResults int) []SearchResult {
 	results := []SearchResult{}
 
-	// Simple HTML parsing - find result class
-	// DuckDuckGo HTML format: <a class="result__a" href="...">Title</a>
-	// followed by <a class="result__snippet">Snippet</a>
+	// Regex to strip HTML tags from extracted content
+	htmlTagPattern := regexp.MustCompile(`<[^>]+>`)
 
-	lines := strings.Split(html, "\n")
-	var currentTitle string
-	var currentURL string
-	var currentSnippet string
+	// Extract result links: <a class="result__a" href="...">Title (may contain <b> tags)</a>
+	linkPattern := regexp.MustCompile(`(?s)<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
+	linkMatches := linkPattern.FindAllStringSubmatch(html, maxResults*2)
 
-	for _, line := range lines {
-		// Extract title and URL from result__a class
-		if strings.Contains(line, "class=\"result__a\"") {
-			// Extract URL
-			if start := strings.Index(line, "href=\""); start != -1 {
-				start += 6
-				end := strings.Index(line[start:], "\"")
-				if end != -1 {
-					currentURL = line[start : start+end]
-					// DuckDuckGo uses redirect URLs, extract the actual URL
-					if strings.Contains(currentURL, "uddg=") {
-						if uddgStart := strings.Index(currentURL, "uddg="); uddgStart != -1 {
-							actualURL := currentURL[uddgStart+5:]
-							if decoded, err := url.QueryUnescape(actualURL); err == nil {
-								currentURL = decoded
-							}
-						}
-					}
+	// Extract snippets: <a class="result__snippet" ...>Snippet (may contain <b> tags)</a>
+	// Also try <td class="result__snippet"> for alternate format
+	snippetPattern := regexp.MustCompile(`(?s)class="result__snippet"[^>]*>(.*?)</(?:a|td)>`)
+	snippetMatches := snippetPattern.FindAllStringSubmatch(html, maxResults*2)
+
+	// Pair up links and snippets
+	for i := 0; i < len(linkMatches) && len(results) < maxResults; i++ {
+		rawURL := linkMatches[i][1]
+		rawTitle := linkMatches[i][2]
+
+		// Decode DuckDuckGo redirect URLs
+		actualURL := rawURL
+		if strings.Contains(actualURL, "uddg=") {
+			if uddgStart := strings.Index(actualURL, "uddg="); uddgStart != -1 {
+				extracted := actualURL[uddgStart+5:]
+				// Cut at the next & parameter if present
+				if ampIdx := strings.Index(extracted, "&"); ampIdx != -1 {
+					extracted = extracted[:ampIdx]
 				}
-			}
-
-			// Extract title (between > and <)
-			if start := strings.Index(line, ">"); start != -1 {
-				rest := line[start+1:]
-				if end := strings.Index(rest, "<"); end != -1 {
-					currentTitle = strings.TrimSpace(rest[:end])
+				if decoded, err := url.QueryUnescape(extracted); err == nil {
+					actualURL = decoded
 				}
 			}
 		}
 
-		// Extract snippet from result__snippet class
-		if strings.Contains(line, "class=\"result__snippet\"") {
-			if start := strings.Index(line, ">"); start != -1 {
-				rest := line[start+1:]
-				if end := strings.Index(rest, "<"); end != -1 {
-					currentSnippet = strings.TrimSpace(rest[:end])
-				}
-			}
-
-			// Save result if we have all components
-			if currentTitle != "" && currentURL != "" && currentSnippet != "" {
-				results = append(results, SearchResult{
-					Title:   currentTitle,
-					URL:     currentURL,
-					Snippet: currentSnippet,
-				})
-
-				if len(results) >= maxResults {
-					break
-				}
-
-				// Reset for next result
-				currentTitle = ""
-				currentURL = ""
-				currentSnippet = ""
-			}
+		// Skip non-http URLs (ads, DDG internal links)
+		if !strings.HasPrefix(actualURL, "http://") && !strings.HasPrefix(actualURL, "https://") {
+			continue
 		}
+
+		// Strip HTML tags from title
+		cleanTitle := htmlTagPattern.ReplaceAllString(rawTitle, "")
+		cleanTitle = strings.TrimSpace(cleanTitle)
+
+		// Get corresponding snippet (if available)
+		snippet := ""
+		if i < len(snippetMatches) {
+			snippet = htmlTagPattern.ReplaceAllString(snippetMatches[i][1], "")
+			snippet = strings.TrimSpace(snippet)
+		}
+
+		if cleanTitle == "" {
+			continue
+		}
+
+		// If no snippet, use a placeholder so we don't lose the result entirely
+		if snippet == "" {
+			snippet = "(no preview available)"
+		}
+
+		results = append(results, SearchResult{
+			Title:   cleanTitle,
+			URL:     actualURL,
+			Snippet: snippet,
+		})
 	}
 
 	return results
