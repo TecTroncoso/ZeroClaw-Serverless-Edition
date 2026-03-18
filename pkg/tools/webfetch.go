@@ -32,7 +32,7 @@ type WebFetchTool struct {
 // - WEBFETCH_TIMEOUT: HTTP timeout in seconds (default: 8)
 // - WEBFETCH_MAX_CHARS: Maximum characters to return (default: 4000)
 func NewWebFetchTool() *WebFetchTool {
-	timeout := 8 // Default 8 seconds for serverless
+	timeout := 5 // Default 5 seconds for aggressive serverless performance
 	if t := os.Getenv("WEBFETCH_TIMEOUT"); t != "" {
 		if parsed, err := parseTimeout(t); err == nil {
 			timeout = parsed

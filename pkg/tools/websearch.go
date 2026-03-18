@@ -63,7 +63,7 @@ func NewWebSearchToolWithConfig(cfg *WebSearchConfig) *WebSearchTool {
 		}
 	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 15 * time.Second
+		cfg.Timeout = 5 * time.Second // Aggressive timeout for serverless
 	}
 
 	return &WebSearchTool{

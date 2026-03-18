@@ -135,10 +135,10 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 	// Debug log for memory injection
 	log.Printf("DEBUG: Injecting %d memories into prompt context", len(memories))
 
-	// STEP 2: Retrieve recent history (last 25 messages)
+	// STEP 2: Retrieve recent history (matches MaxHistoryMessages to avoid wasting network)
 	var recentHistory []core.MemoryEntry
 	if a.memory != nil && a.config.SessionID != "" {
-		history, err := a.memory.GetRecentHistory(ctx, &a.config.SessionID, 25)
+		history, err := a.memory.GetRecentHistory(ctx, &a.config.SessionID, MaxHistoryMessages)
 		if err != nil {
 			fmt.Printf("[agent] history retrieval error: %v\n", err)
 		} else {
