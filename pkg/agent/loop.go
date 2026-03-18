@@ -247,6 +247,9 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 
 	// If we hit max iterations without final response, get one more
 	if lastResponse == "" && len(messages) > 0 {
+		// Add explicit instruction to NOT use tools in the final call
+		messages = append(messages, core.NewUserMessage(
+			"Please provide your final answer now based on the tool results above. Do NOT call any more tools. Respond directly in natural language."))
 		finalResp, err := a.provider.Chat(ctx, messages, nil, a.config.Model, a.config.Temperature)
 		if err != nil {
 			return "", iterations, toolCallsMade, fmt.Errorf("final provider error: %w", err)
@@ -256,6 +259,11 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 
 	// Sanitize: strip any leaked tool call artifacts from the final response
 	lastResponse = sanitizeResponse(lastResponse)
+
+	// Safety net: never return an empty response (Telegram will reject it)
+	if lastResponse == "" {
+		lastResponse = "He procesado tu solicitud pero no pude generar una respuesta clara. ¿Podrías reformular tu pregunta?"
+	}
 
 	return lastResponse, iterations, toolCallsMade, nil
 }
