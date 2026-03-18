@@ -180,11 +180,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send "typing..." indicator synchronously before freezing the serverless execution
+	// Send "typing..." indicator asynchronously — the LLM processing takes
+	// several seconds, giving this goroutine plenty of time to complete before
+	// Vercel freezes the container after the HTTP response is sent.
 	if responseChannel != nil && responseRecipient != "" {
-		if err := responseChannel.SendTyping(ctx, responseRecipient); err != nil {
-			log.Printf("Warning: typing indicator failed: %v", err)
-		}
+		go func() {
+			if err := responseChannel.SendTyping(ctx, responseRecipient); err != nil {
+				log.Printf("Warning: typing indicator failed: %v", err)
+			}
+		}()
 	}
 
 	// Process message synchronously (Vercel freezes after response)
