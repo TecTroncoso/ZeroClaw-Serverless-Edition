@@ -94,6 +94,8 @@ func init() {
 	// Initialize Tools
 	toolz = []core.Tool{
 		tools.NewWebSearchTool(),
+		tools.NewWebFetchTool(),
+		tools.NewHTTPRequestTool(),
 	}
 	log.Printf("ZeroClaw: %d tools registered", len(toolz))
 
