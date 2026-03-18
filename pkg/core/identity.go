@@ -179,6 +179,7 @@ func (b *SystemPromptBuilder) buildToolsSection() string {
 
 	sb.WriteString("\nAfter using a tool, you will receive its result and can continue reasoning.\n")
 	sb.WriteString("\nCRITICAL RULE FOR TOOL CALLING: When you need to use a tool (like web_search), you MUST output ONLY the native tool call or the JSON block. DO NOT say 'Un momento' or 'Voy a buscar'. Output NOTHING but the tool call. If you include conversational text along with a tool call, the system will break.\n")
+	sb.WriteString("\nMANDATORY MEMORY RULE: When the user tells you their name, age, location, birthday, preferences, or any personal/important fact, you MUST IMMEDIATELY use the 'core_memory_save' tool to store it BEFORE responding. Use descriptive keys like 'user_name', 'user_age', 'user_location', 'user_preference_X'. If you do NOT save it, you WILL forget it forever. This is your HIGHEST PRIORITY when personal data is shared.\n")
 	return sb.String()
 }
 

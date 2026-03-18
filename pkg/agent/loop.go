@@ -342,7 +342,7 @@ func (a *Agent) recallMemory(ctx context.Context, query string) ([]core.MemoryEn
 	}
 
 	sessionID := a.config.SessionID
-	memories, err := a.memory.Recall(ctx, query, 5, &sessionID)
+	memories, err := a.memory.Recall(ctx, query, 10, &sessionID)
 	if err != nil {
 		return nil, err
 	}
