@@ -219,11 +219,12 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 		toolCallsMade = append(toolCallsMade, calledTools...)
 
 		// Add assistant message to history.
-		// IMPORTANT: When the LLM returns tool calls alongside conversational text
-		// (e.g. "I'll search for..."), we DISCARD the text to keep history clean.
-		// Qwen/Cerebras models tend to mix chat text with tool calls, which pollutes
-		// the conversation and leaks internal markers to the user.
-		assistantMsg := core.NewAssistantMessage("")
+		// Sanitize the text to keep the LLM's reasoning (e.g. "I'll search for...")
+		// but strip any leaked tool call XML/JSON artifacts.
+		// We must NOT discard the text entirely or the LLM loses context about
+		// why it called the tools and can't connect results to the user's question.
+		assistantContent := sanitizeResponse(resp.TextOrEmpty())
+		assistantMsg := core.NewAssistantMessage(assistantContent)
 		assistantMsg.ToolCalls = resp.ToolCalls
 		messages = append(messages, assistantMsg)
 
