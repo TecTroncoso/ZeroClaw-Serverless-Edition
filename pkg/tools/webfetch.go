@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -88,7 +89,7 @@ func (t *WebFetchTool) Name() string {
 
 // Description returns the tool description.
 func (t *WebFetchTool) Description() string {
-	return "Fetches a web page and extracts its text content. Useful for retrieving information from URLs. Automatically cleans HTML to extract readable text."
+	return "Fetches web pages and extracts text content. Supports multiple URLs with automatic fallback: if the first URL fails or times out, the next one is tried. Automatically cleans HTML to extract readable text."
 }
 
 // ParametersSchema returns the JSON Schema for tool parameters.
@@ -96,32 +97,82 @@ func (t *WebFetchTool) ParametersSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
+			"urls": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type": "string",
+				},
+				"description": "List of URLs ordered by priority. If the first fails or times out, the system will automatically try the next one.",
+			},
 			"url": map[string]interface{}{
 				"type":        "string",
-				"description": "The URL to fetch (must start with http:// or https://)",
+				"description": "Single URL to fetch (alternative to urls array).",
 			},
 		},
-		"required": []string{"url"},
 	}
 }
 
-// Execute runs the web fetch tool.
+// Execute runs the web fetch tool with multi-URL fallback.
 func (t *WebFetchTool) Execute(ctx context.Context, args map[string]interface{}) (*core.ToolResult, error) {
-	// Extract URL
-	url, ok := args["url"].(string)
-	if !ok || url == "" {
-		return nil, fmt.Errorf("url is required")
+	// Build the URL list: support both "urls" array and legacy "url" string
+	var urls []string
+
+	// Try "urls" array first
+	if rawURLs, ok := args["urls"]; ok {
+		switch v := rawURLs.(type) {
+		case []interface{}:
+			for _, u := range v {
+				if s, ok := u.(string); ok && s != "" {
+					urls = append(urls, s)
+				}
+			}
+		case []string:
+			urls = v
+		}
 	}
 
-	// Validate URL
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return nil, fmt.Errorf("url must start with http:// or https://")
+	// Fallback to single "url" string (backward compatibility)
+	if len(urls) == 0 {
+		if singleURL, ok := args["url"].(string); ok && singleURL != "" {
+			urls = []string{singleURL}
+		}
 	}
 
+	if len(urls) == 0 {
+		return core.NewErrorResult("At least one URL is required (use 'urls' array or 'url' string)"), nil
+	}
+
+	// Try each URL in order until one succeeds
+	var lastErr error
+	for i, targetURL := range urls {
+		// Validate URL
+		if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
+			log.Printf("Warning: skipping invalid URL (no http/https): %s", targetURL)
+			lastErr = fmt.Errorf("invalid URL: %s", targetURL)
+			continue
+		}
+
+		text, err := t.fetchSingleURL(ctx, targetURL)
+		if err != nil {
+			lastErr = err
+			log.Printf("Warning: failed to fetch URL %d/%d (%s): %v, trying next...", i+1, len(urls), targetURL, err)
+			continue
+		}
+
+		// Success! Return immediately
+		return core.NewSuccessResult(text), nil
+	}
+
+	// All URLs failed
+	return core.NewErrorResult(fmt.Sprintf("All %d URLs failed. Last error: %v", len(urls), lastErr)), nil
+}
+
+// fetchSingleURL fetches and cleans content from a single URL.
+func (t *WebFetchTool) fetchSingleURL(ctx context.Context, targetURL string) (string, error) {
 	// Create request with context
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Set common headers to avoid being blocked
@@ -132,19 +183,19 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]interface{})
 	// Execute request
 	resp, err := t.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch URL: %w", err)
+		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Check status code
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP error: %s", resp.Status)
+		return "", fmt.Errorf("HTTP error: %s", resp.Status)
 	}
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return "", fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Clean HTML and extract text
@@ -155,7 +206,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]interface{})
 		text = text[:t.maxChars] + "\n\n[... content truncated ...]"
 	}
 
-	return core.NewSuccessResult(text), nil
+	return text, nil
 }
 
 // Spec returns the full tool specification.
