@@ -218,13 +218,13 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 		toolResults, calledTools := a.executeTools(ctx, resp.ToolCalls)
 		toolCallsMade = append(toolCallsMade, calledTools...)
 
-		// Add assistant message to history
-		assistantContent := resp.TextOrEmpty()
-		assistantMsg := core.NewAssistantMessage(assistantContent)
-		if len(resp.ToolCalls) > 0 {
-			assistantMsg.ToolCalls = resp.ToolCalls
-			assistantMsg.Content += "\n\n[Tool calls made]"
-		}
+		// Add assistant message to history.
+		// IMPORTANT: When the LLM returns tool calls alongside conversational text
+		// (e.g. "I'll search for..."), we DISCARD the text to keep history clean.
+		// Qwen/Cerebras models tend to mix chat text with tool calls, which pollutes
+		// the conversation and leaks internal markers to the user.
+		assistantMsg := core.NewAssistantMessage("")
+		assistantMsg.ToolCalls = resp.ToolCalls
 		messages = append(messages, assistantMsg)
 
 		// Add tool results to history
@@ -253,6 +253,9 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 		}
 		lastResponse = finalResp.TextOrEmpty()
 	}
+
+	// Sanitize: strip any leaked tool call artifacts from the final response
+	lastResponse = sanitizeResponse(lastResponse)
 
 	return lastResponse, iterations, toolCallsMade, nil
 }
@@ -412,6 +415,30 @@ func (a *Agent) truncateHistory(messages []core.ChatMessage) []core.ChatMessage 
 	return result
 }
 
+// sanitizeResponse strips any leaked tool call artifacts from the final response.
+// Qwen/Cerebras models sometimes include raw tool call XML/JSON in their text output.
+func sanitizeResponse(text string) string {
+	// Remove <tool_call>...</tool_call> blocks
+	toolCallPattern := regexp.MustCompile(`(?s)<tool_call>.*?</tool_call>`)
+	text = toolCallPattern.ReplaceAllString(text, "")
+
+	// Remove [Tool calls made] markers
+	text = strings.ReplaceAll(text, "[Tool calls made]", "")
+
+	// Remove {"tool": ...} JSON blocks that leaked into text
+	jsonToolPattern := regexp.MustCompile(`(?s)\{"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\}\}`)
+	text = jsonToolPattern.ReplaceAllString(text, "")
+
+	// Remove {"name": ...} tool call blocks
+	jsonNamePattern := regexp.MustCompile(`(?s)\{"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\}\}`)
+	text = jsonNamePattern.ReplaceAllString(text, "")
+
+	// Clean up excessive whitespace left behind
+	text = regexp.MustCompile(`\n{3,}`).ReplaceAllString(text, "\n\n")
+	text = strings.TrimSpace(text)
+
+	return text
+}
 // ============================================================================
 // CREDENTIAL SCRUBBING
 // ============================================================================
