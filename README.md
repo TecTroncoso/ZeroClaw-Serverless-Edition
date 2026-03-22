@@ -217,12 +217,16 @@ Discord requiere validación de firmas criptográficas para enviar eventos a Ver
 2. En la sección **General Information**, copia tu **Public Key** y configúralo en las variables de entorno como `DISCORD_PUBLIC_KEY`. Copia también el **Application ID** y configúralo como `DISCORD_APP_ID`.
 3. Configura tu token de bot como `DISCORD_BOT_TOKEN`.
 4. En la misma página, bajo **Interactions Endpoint URL**, ingresa la URL:
+
 ```text
 https://<TU_DOMINIO>/api/webhook?channel=discord
 ```
-> ⚠️ **Nota importante:** Discord usa "Slash commands" para los webhooks de interacciones Serverless. Interactúa con el bot usando comandos de aplicación.
-5. Usa la pestaña OAuth2 para invitar a tu bot a tu servidor asegurándote de darle el scope `applications.commands`.
-6. Para registrar el comando `/chat` en los servidores de Discord, visita simplemente esta URL en tu navegador (tras hacer deploy):
+
+> ⚠️ **Arquitectura Serverless:** Discord exige que el bot responda en menos de 3 segundos, pero la IA suele tardar más. ZeroClaw soluciona esto en Vercel usando un **Patrón Async Worker**: el webhook responde instantáneamente a Discord ("Pensando...") y dispara una petición HTTP a sí mismo (`&bg=true`) en segundo plano para procesar la IA y luego editar el mensaje con la respuesta final.
+
+5. Usa la pestaña **Installation** para activar el modo **User Install** (y/o Guild Install) añadiendo el scope `applications.commands` (para usarlo por Mensajes Directos).
+6. Para registrar el comando `/chat` globalmente en Discord, visita simplemente esta URL en tu navegador (tras hacer deploy):
+
 ```text
 https://<TU_DOMINIO>/api/webhook?setup_discord=true
 ```
