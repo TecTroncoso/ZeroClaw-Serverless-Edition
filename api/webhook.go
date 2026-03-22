@@ -112,7 +112,14 @@ func init() {
 // handler is the main entrypoint for Vercel Serverless Functions.
 func handler(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-	ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+	
+	// Si es una petición en segundo plano, desligamos el context de la conexión HTTP
+	// para que no se cancele cuando la instancia enviadora corte la conexión.
+	baseCtx := context.Background()
+	if r.URL.Query().Get("bg") != "true" {
+		baseCtx = r.Context()
+	}
+	ctx, cancel := context.WithTimeout(baseCtx, 55*time.Second)
 	defer cancel()
 
 	// Intercept setup route
@@ -309,6 +316,19 @@ func handleDiscord(body []byte, w http.ResponseWriter, r *http.Request) (*channe
 	userID := interaction.ExtractUserID()
 	userName := interaction.ExtractUserName()
 
+	// Pattern Background Worker para Vercel:
+	// Discord exige respuesta en 3s. OpenAI tarda +5s.
+	// 1. Recibimos interacción principal (bg != true)
+	// 2. Disparamos background request a nuestro propio Vercel y respondemos 200 OK a Discord (Pensando...)
+	// 3. El background worker (bg == true) recibe la request, procesa con la IA, y envía PATCH para editar el mensaje.
+	isBg := r != nil && r.URL.Query().Get("bg") == "true"
+
+	if !isBg && r != nil {
+		log.Printf("ZeroClaw: Firing background worker for Discord Interaction")
+		triggerDiscordBackgroundWorker(r, body)
+		return nil, nil, "", channels.NewDeferredResponse()
+	}
+
 	msg := &channels.IncomingMessage{
 		Channel:    "discord",
 		SenderID:   userID,
@@ -323,8 +343,31 @@ func handleDiscord(body []byte, w http.ResponseWriter, r *http.Request) (*channe
 		},
 	}
 
-	// Return deferred response - we'll send followup after processing
-	return msg, ch, channelID, channels.NewDeferredResponse()
+	// Usamos token|app_id como recipient para que DiscordChannel sepa que debe hacer PATCH
+	recipient := interaction.Token + "|" + interaction.ApplicationID
+
+	// Devolvemos platformResponse=nil porque el worker completará la tarea normal y no responderá instantáneamente HTTP.
+	return msg, ch, recipient, nil
+}
+
+// triggerDiscordBackgroundWorker envía una petición a la propia URL de Vercel para 
+// procesar la interacción de forma asíncrona sin bloquear la respuesta de 3s obligatoria de Discord.
+func triggerDiscordBackgroundWorker(r *http.Request, body []byte) {
+	scheme := "https"
+	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+	
+	url := fmt.Sprintf("%s://%s/api/webhook?channel=discord&bg=true", scheme, r.Host)
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Signature-Ed25519", r.Header.Get("X-Signature-Ed25519"))
+	req.Header.Set("X-Signature-Timestamp", r.Header.Get("X-Signature-Timestamp"))
+
+	// Damos 1 segundo para que la petición salga. Aunque el cliente corte (y dé timeout), 
+	// el servidor destino ya habrá comenzado gracias al context.Background()
+	client := &http.Client{Timeout: 1 * time.Second}
+	client.Do(req)
 }
 
 // handleSlack processes a Slack event.

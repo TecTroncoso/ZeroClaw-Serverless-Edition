@@ -54,7 +54,13 @@ func (c *DiscordChannel) Send(recipient, message string) error {
 		return fmt.Errorf("DISCORD_BOT_TOKEN not configured")
 	}
 
-	// Discord API v10 endpoint
+	// Check if this is an interaction followup (format: token|app_id)
+	parts := strings.SplitN(recipient, "|", 2)
+	if len(parts) == 2 && len(parts[1]) > 5 {
+		return c.EditInteractionResponse(parts[1], parts[0], message)
+	}
+
+	// Normal Send: Discord API v10 endpoint
 	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s/messages", recipient)
 
 	payload := map[string]interface{}{
@@ -124,6 +130,40 @@ func (c *DiscordChannel) SendEmbed(recipient string, embed DiscordEmbed) error {
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("discord API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// EditInteractionResponse edits the original interaction response after it was deferred.
+func (c *DiscordChannel) EditInteractionResponse(appID, token, message string) error {
+	url := fmt.Sprintf("https://discord.com/api/v10/webhooks/%s/%s/messages/@original", appID, token)
+
+	payload := map[string]interface{}{
+		"content": truncateMessage(message, 2000),
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PATCH", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to edit interaction: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("discord interaction edit error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil
