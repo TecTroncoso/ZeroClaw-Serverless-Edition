@@ -499,13 +499,18 @@ func autoDetectChannel(body []byte, w http.ResponseWriter, r *http.Request) (*ch
 
 // processMessage runs the agent loop to process an incoming message.
 func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string, error) {
+	sessionID := os.Getenv("MASTER_SESSION_ID")
+	if sessionID == "" {
+		sessionID = "global_master_memory"
+	}
+
 	// Build agent configuration
 	config := &agent.Config{
 		MaxIterations: 5,
 		Timeout:       50 * time.Second,
 		Temperature:   0.7,
 		Model:         os.Getenv("OPENAI_MODEL"),
-		SessionID:     msg.SenderID,
+		SessionID:     sessionID,
 	}
 
 	// Inject session-specific memory tool if memory is available

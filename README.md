@@ -32,6 +32,9 @@ Los agentes de IA tradicionales requieren servidores permanentemente activos, lo
 **🧠 Smart Chunking para Memoria**:
 - Textos largos (>500 chars) se dividen en chunks semánticamente coherentes antes de generar embeddings. Cada chunk se almacena como fila independiente con su propio vector, mejorando drásticamente la precisión del recall RAG.
 
+**🧠 Memoria Global Unificada (Omni-Canal)**:
+- Posibilidad de forzar un único cerebro y contexto (corto y largo plazo) a través de todos los canales (Telegram, Discord, WhatsApp, Slack) mediante la variable `MASTER_SESSION_ID`. Ideal para asistentes personales de uso privado.
+
 **📝 Memoria Conversacional Mejorada**:
 - Inyección de contexto conversacional reciente + memoria semántica. `MinMessageCharsForMemory = 1` para que mensajes cortos ("suma 3+3") también persistan.
 
@@ -115,7 +118,7 @@ Identidad estructurada basada en el estándar [AIEOS v1.1](https://aieos.org):
 ```
 zeroclaw-go/
 ├── api/
-│   └── webhook.go              # 📍 Entry point de Vercel Serverless
+│   └── webhook.go              # 📍 Entry point Vercel (Routing & Omni-Canal Memory)
 ├── pkg/                         # 📦 Código fuente del framework
 │   ├── agent/
 │   │   └── loop.go             # 🤖 Core del agente (parallel tool-calling loop)
@@ -321,6 +324,7 @@ OPENAI_MODEL=grok-beta
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
+| `MASTER_SESSION_ID`| (vacío) | ID único para forzar memoria global en todos los canales |
 | `DEFAULT_SESSION_ID` | `default` | ID de sesión por defecto |
 | `SYSTEM_PROMPT` | (AIEOS default) | Prompt de sistema custom |
 | `AGENT_NAME` | `ZeroClaw` | Nombre del agente |
