@@ -5,6 +5,8 @@ package channels
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,18 +22,20 @@ import (
 // DiscordChannel implements the Channel interface for Discord.
 type DiscordChannel struct {
 	botToken   string
+	publicKey  string
 	httpClient *http.Client
 }
 
 // NewDiscordChannel creates a new Discord channel.
 func NewDiscordChannel() *DiscordChannel {
-	return NewDiscordChannelWithToken(os.Getenv("DISCORD_BOT_TOKEN"))
+	return NewDiscordChannelWithToken(os.Getenv("DISCORD_BOT_TOKEN"), os.Getenv("DISCORD_PUBLIC_KEY"))
 }
 
 // NewDiscordChannelWithToken creates a Discord channel with explicit token.
-func NewDiscordChannelWithToken(token string) *DiscordChannel {
+func NewDiscordChannelWithToken(token, publicKey string) *DiscordChannel {
 	return &DiscordChannel{
-		botToken: token,
+		botToken:  token,
+		publicKey: publicKey,
 		httpClient: &http.Client{
 			Timeout: httpTimeout,
 		},
@@ -493,4 +497,29 @@ func truncateMessage(message string, maxLength int) string {
 		return message
 	}
 	return message[:maxLength-3] + "..."
+}
+
+// ============================================================================
+// DISCORD SIGNATURE VERIFICATION
+// ============================================================================
+
+// VerifySignature verifies the Ed25519 cryptographic signature of a Discord request.
+func (c *DiscordChannel) VerifySignature(signatureHex, timestamp string, body []byte) bool {
+	if c.publicKey == "" {
+		// Missing public key configuration, cannot authenticate
+		return false
+	}
+
+	sig, err := hex.DecodeString(signatureHex)
+	if err != nil || len(sig) != ed25519.SignatureSize {
+		return false
+	}
+
+	pub, err := hex.DecodeString(c.publicKey)
+	if err != nil || len(pub) != ed25519.PublicKeySize {
+		return false
+	}
+
+	msg := append([]byte(timestamp), body...)
+	return ed25519.Verify(ed25519.PublicKey(pub), msg, sig)
 }

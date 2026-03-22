@@ -147,14 +147,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	case "telegram":
 		incomingMsg, responseChannel, responseRecipient, platformResponse = handleTelegram(body)
 	case "discord":
-		incomingMsg, responseChannel, responseRecipient, platformResponse = handleDiscord(body)
+		incomingMsg, responseChannel, responseRecipient, platformResponse = handleDiscord(body, w, r)
 	case "slack":
 		incomingMsg, responseChannel, responseRecipient, platformResponse = handleSlack(body, w)
 	case "whatsapp":
 		incomingMsg, responseChannel, responseRecipient, platformResponse = handleWhatsApp(body)
 	default:
 		// Try to auto-detect channel from payload structure
-		incomingMsg, responseChannel, responseRecipient, platformResponse = autoDetectChannel(body)
+		incomingMsg, responseChannel, responseRecipient, platformResponse = autoDetectChannel(body, w, r)
 	}
 
 	// Handle platform-specific immediate response
@@ -164,11 +164,18 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		case *channels.DiscordInteractionResponse:
 			respondJSON(w, v, http.StatusOK)
 			// For Discord, we need to send followup after ACK
+			// Flush the response so Vercel sends it to Discord immediately
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
 			if incomingMsg != nil {
 				processAndRespond(ctx, incomingMsg, responseChannel, responseRecipient)
 			}
 			return
 		case string:
+			if v == "unauthorized" {
+				return // Already wrote HTTP Error in the handler
+			}
 			// Plain text response (e.g., Slack challenge)
 			respondText(w, v, http.StatusOK)
 			return
@@ -261,7 +268,19 @@ func handleTelegram(body []byte) (*channels.IncomingMessage, channels.Channel, s
 }
 
 // handleDiscord processes a Discord interaction.
-func handleDiscord(body []byte) (*channels.IncomingMessage, channels.Channel, string, interface{}) {
+func handleDiscord(body []byte, w http.ResponseWriter, r *http.Request) (*channels.IncomingMessage, channels.Channel, string, interface{}) {
+	ch := channels.NewDiscordChannel()
+
+	if r != nil && w != nil {
+		signature := r.Header.Get("X-Signature-Ed25519")
+		timestamp := r.Header.Get("X-Signature-Timestamp")
+		if !ch.VerifySignature(signature, timestamp, body) {
+			log.Printf("ZeroClaw: Invalid Discord signature")
+			http.Error(w, "invalid request signature", http.StatusUnauthorized)
+			return nil, nil, "", "unauthorized"
+		}
+	}
+
 	interaction, err := channels.ParseDiscordInteraction(body)
 	if err != nil {
 		log.Printf("ZeroClaw: Failed to parse Discord interaction: %v", err)
@@ -297,7 +316,6 @@ func handleDiscord(body []byte) (*channels.IncomingMessage, channels.Channel, st
 		},
 	}
 
-	ch := channels.NewDiscordChannel()
 	// Return deferred response - we'll send followup after processing
 	return msg, ch, channelID, channels.NewDeferredResponse()
 }
@@ -395,7 +413,7 @@ func handleWhatsApp(body []byte) (*channels.IncomingMessage, channels.Channel, s
 }
 
 // autoDetectChannel attempts to detect the channel from payload structure.
-func autoDetectChannel(body []byte) (*channels.IncomingMessage, channels.Channel, string, interface{}) {
+func autoDetectChannel(body []byte, w http.ResponseWriter, r *http.Request) (*channels.IncomingMessage, channels.Channel, string, interface{}) {
 	// Try Telegram
 	if update, err := channels.ParseTelegramWebhook(body); err == nil && update.Message != nil {
 		return handleTelegram(body)
@@ -406,7 +424,7 @@ func autoDetectChannel(body []byte) (*channels.IncomingMessage, channels.Channel
 		if interaction.IsPing() {
 			return nil, nil, "", channels.NewPongResponse()
 		}
-		return handleDiscord(body)
+		return handleDiscord(body, w, r)
 	}
 
 	// Try Slack
