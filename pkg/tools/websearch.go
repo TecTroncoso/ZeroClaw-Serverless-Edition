@@ -97,10 +97,10 @@ func (t *WebSearchTool) ParametersSchema() map[string]interface{} {
 			},
 			"num_results": map[string]interface{}{
 				"type":        "integer",
-				"description": "Number of results to return (default: 5, max: 10)",
-				"default":     5,
+				"description": "Number of results to return (default: 1, max: 2)",
+				"default":     1,
 				"minimum":     1,
-				"maximum":     10,
+				"maximum":     2,
 			},
 		},
 		"required": []string{"query"},
@@ -116,15 +116,16 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]interface{}
 	}
 
 	// Extract num_results (optional)
-	numResults := 5
+	numResults := 1
 	if n, ok := args["num_results"].(float64); ok {
 		numResults = int(n)
 		if numResults < 1 {
 			numResults = 1
 		}
-		if numResults > 10 {
-			numResults = 10
-		}
+	}
+	// Force maximum to 2 to save LLM tokens and prevent provider rate limits
+	if numResults > 2 {
+		numResults = 2
 	}
 
 	// Perform search based on provider

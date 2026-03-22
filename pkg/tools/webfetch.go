@@ -143,6 +143,11 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]interface{})
 	}
 
 	// Try each URL in order until one succeeds
+	// Limit fallback to max 1 retry (total 2 URLs) to save LLM tokens and prevent provider rate limits
+	if len(urls) > 2 {
+		urls = urls[:2]
+	}
+
 	var lastErr error
 	for i, targetURL := range urls {
 		// Validate URL
