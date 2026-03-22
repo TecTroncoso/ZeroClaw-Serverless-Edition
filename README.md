@@ -211,12 +211,21 @@ Reemplazar:
 
 #### 💬 Discord
 
+Discord requiere validación de firmas criptográficas para enviar eventos a Vercel.
+
 1. Crear aplicación en [Discord Developer Portal](https://discord.com/developers/applications)
-2. Ir a **Interactions Endpoint URL**:
-```
+2. En la sección **General Information**, copia tu **Public Key** y configúralo en las variables de entorno como `DISCORD_PUBLIC_KEY`. Copia también el **Application ID** y configúralo como `DISCORD_APP_ID`.
+3. Configura tu token de bot como `DISCORD_BOT_TOKEN`.
+4. En la misma página, bajo **Interactions Endpoint URL**, ingresa la URL:
+```text
 https://<TU_DOMINIO>/api/webhook?channel=discord
 ```
-3. Install → Generate OAuth URL → Authorize
+> ⚠️ **Nota importante:** Discord usa "Slash commands" para los webhooks de interacciones Serverless. Interactúa con el bot usando comandos de aplicación.
+5. Usa la pestaña OAuth2 para invitar a tu bot a tu servidor asegurándote de darle el scope `applications.commands`.
+6. Para registrar el comando `/chat` en los servidores de Discord, visita simplemente esta URL en tu navegador (tras hacer deploy):
+```text
+https://<TU_DOMINIO>/api/webhook?setup_discord=true
+```
 
 #### 💼 Slack
 
@@ -298,6 +307,8 @@ OPENAI_MODEL=grok-beta
 |----------|-------------|
 | `TELEGRAM_BOT_TOKEN` | Token de Bot de Telegram |
 | `DISCORD_BOT_TOKEN` | Token de Bot de Discord |
+| `DISCORD_APP_ID` | Application ID de Discord (Requerido para setup de comandos) |
+| `DISCORD_PUBLIC_KEY` | Public Key de Discord (Requerida para webhooks) |
 | `SLACK_BOT_TOKEN` | Token de Bot de Slack (xoxb-...) |
 | `WHATSAPP_TOKEN` | WhatsApp Cloud API Access Token |
 | `WHATSAPP_PHONE_ID` | Phone Number ID de WhatsApp |

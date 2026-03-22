@@ -114,6 +114,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
 	defer cancel()
 
+	// Intercept setup route
+	if r.URL.Query().Get("setup_discord") == "true" {
+		setupDiscordCommand(w, r)
+		return
+	}
+
 	// Only accept POST requests
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -548,4 +554,59 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // Webhook is the Vercel entrypoint (alternative naming).
 func Webhook(w http.ResponseWriter, r *http.Request) {
 	handler(w, r)
+}
+
+// ============================================================================
+// DISCORD SETUP
+// ============================================================================
+
+// setupDiscordCommand registers the /chat command in Discord automatically.
+func setupDiscordCommand(w http.ResponseWriter, r *http.Request) {
+	appID := os.Getenv("DISCORD_APP_ID")
+	token := os.Getenv("DISCORD_BOT_TOKEN")
+
+	if appID == "" || token == "" {
+		http.Error(w, "Error: Válido solo si configuras DISCORD_APP_ID y DISCORD_BOT_TOKEN en Vercel.", http.StatusBadRequest)
+		return
+	}
+
+	payload := map[string]interface{}{
+		"name":        "chat",
+		"description": "Habla con la Inteligencia Artificial",
+		"options": []map[string]interface{}{
+			{
+				"name":        "mensaje",
+				"description": "El mensaje para enviarle a la IA",
+				"type":        3, // String type
+				"required":    true,
+			},
+		},
+		"contexts":          []int{0, 1, 2}, // Guild, Bot DM, Private Channel
+		"integration_types": []int{0, 1},    // Guild Install, User Install
+	}
+
+	b, _ := json.Marshal(payload)
+	url := fmt.Sprintf("https://discord.com/api/v10/applications/%s/commands", appID)
+
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(b))
+	req.Header.Set("Authorization", "Bot "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error conectando con Discord: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("✅ ¡Éxito! Comando /chat registrado correctamente en servidores y DMs.\nYa puedes cerrar esta pestaña y escribir /chat a tu bot en Discord."))
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("❌ Error registrando comando de Discord (Status %d): %s\n", resp.StatusCode, string(body))))
+	}
 }
