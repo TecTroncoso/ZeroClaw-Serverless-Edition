@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zeroclaw/zeroclaw-go/pkg/agent"
@@ -203,10 +204,58 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send "typing..." indicator asynchronously — the LLM processing takes
-	// several seconds, giving this goroutine plenty of time to complete before
-	// Vercel freezes the container after the HTTP response is sent.
+	// Create stream callback for progressive text generation
+	var streamCallback core.StreamCallback
+	var msgIDForTelegram int
+	var isDiscordStreaming bool
+
 	if responseChannel != nil && responseRecipient != "" {
+		if chName := responseChannel.Name(); chName == "telegram" {
+			tc := responseChannel.(*channels.TelegramChannel)
+			// Send initial message
+			msgID, err := tc.SendWithID(responseRecipient, "Escorpion Assistant está pensando...")
+			if err == nil {
+				msgIDForTelegram = msgID
+				var mu sync.Mutex
+				var currentText string
+				var lastEdit time.Time
+
+				streamCallback = func(chunk string) {
+					mu.Lock()
+					defer mu.Unlock()
+					currentText += chunk
+					if time.Since(lastEdit) >= 1500*time.Millisecond && strings.TrimSpace(currentText) != "" {
+						tc.EditMessage(responseRecipient, msgID, currentText+" ✍️")
+						lastEdit = time.Now()
+					}
+				}
+			} else {
+				log.Printf("ZeroClaw: Warning - failed to send initial telegram message: %v", err)
+			}
+		} else if chName == "discord" {
+			dc := responseChannel.(*channels.DiscordChannel)
+			parts := strings.SplitN(responseRecipient, "|", 2)
+			if len(parts) == 2 {
+				isDiscordStreaming = true
+				token := parts[0]
+				appID := parts[1]
+				var mu sync.Mutex
+				var currentText string
+				var lastEdit time.Time
+
+				streamCallback = func(chunk string) {
+					mu.Lock()
+					defer mu.Unlock()
+					currentText += chunk
+					if time.Since(lastEdit) >= 1500*time.Millisecond && strings.TrimSpace(currentText) != "" {
+						dc.EditInteractionResponse(appID, token, currentText+" ✍️")
+						lastEdit = time.Now()
+					}
+				}
+			}
+		}
+
+		// Keep typing indicator for other channels or as fallback
 		go func() {
 			if err := responseChannel.SendTyping(ctx, responseRecipient); err != nil {
 				log.Printf("Warning: typing indicator failed: %v", err)
@@ -215,7 +264,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process message synchronously (Vercel freezes after response)
-	response, err := processMessage(ctx, incomingMsg)
+	response, err := processMessage(ctx, incomingMsg, streamCallback)
 	if err != nil {
 		log.Printf("ZeroClaw: ERROR - Processing failed: %v", err)
 		if strings.Contains(err.Error(), "context deadline exceeded") {
@@ -225,10 +274,21 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Send response through the channel
+	// Send final response through the channel
 	if responseChannel != nil && responseRecipient != "" {
-		if err := responseChannel.Send(responseRecipient, response); err != nil {
-			log.Printf("ZeroClaw: ERROR - Failed to send response: %v", err)
+		var sendErr error
+		if msgIDForTelegram != 0 {
+			tc := responseChannel.(*channels.TelegramChannel)
+			sendErr = tc.EditMessage(responseRecipient, msgIDForTelegram, response)
+		} else if isDiscordStreaming {
+			// Discord Send handles EditInteractionResponse based on recipient token|appID
+			sendErr = responseChannel.Send(responseRecipient, response)
+		} else {
+			sendErr = responseChannel.Send(responseRecipient, response)
+		}
+
+		if sendErr != nil {
+			log.Printf("ZeroClaw: ERROR - Failed to send final response: %v", sendErr)
 		}
 	}
 
@@ -498,7 +558,7 @@ func autoDetectChannel(body []byte, w http.ResponseWriter, r *http.Request) (*ch
 // ============================================================================
 
 // processMessage runs the agent loop to process an incoming message.
-func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string, error) {
+func processMessage(ctx context.Context, msg *channels.IncomingMessage, streamCallback core.StreamCallback) (string, error) {
 	sessionID := os.Getenv("MASTER_SESSION_ID")
 	if sessionID == "" {
 		sessionID = "global_master_memory"
@@ -524,7 +584,7 @@ func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string,
 	ag := agent.NewAgent(mem, prov, sessionTools, config, ident)
 
 	// Run agent loop
-	result, err := ag.Run(ctx, msg.Text)
+	result, err := ag.Run(ctx, msg.Text, streamCallback)
 	if err != nil {
 		return "", fmt.Errorf("agent execution failed: %w", err)
 	}
@@ -535,7 +595,7 @@ func processMessage(ctx context.Context, msg *channels.IncomingMessage) (string,
 // processAndRespond processes a message and sends response asynchronously.
 // Used for platforms like Discord that require immediate ACK.
 func processAndRespond(ctx context.Context, msg *channels.IncomingMessage, ch channels.Channel, recipient string) {
-	response, err := processMessage(ctx, msg)
+	response, err := processMessage(ctx, msg, nil) // Fallback processing
 	if err != nil {
 		log.Printf("ZeroClaw: ERROR - Async processing failed: %v", err)
 		if strings.Contains(err.Error(), "context deadline exceeded") {

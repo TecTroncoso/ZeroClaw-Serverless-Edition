@@ -4,6 +4,7 @@
 package providers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -145,6 +146,24 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []core.ChatMessage, 
 
 	// Parse response
 	return p.parseChatResponse(resp)
+}
+
+// ChatStream performs a structured chat and streams text content to a callback.
+func (p *OpenAIProvider) ChatStream(ctx context.Context, messages []core.ChatMessage, tools []core.ToolSpec, model string, temperature float64, callback core.StreamCallback) (*core.ChatResponse, error) {
+	if model == "" {
+		model = p.model
+	}
+
+	reqBody := p.buildChatRequest(messages, tools, model, temperature)
+	reqBody["stream"] = true
+
+	respBody, err := p.doStreamRequest(ctx, "/chat/completions", reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("stream request failed: %w", err)
+	}
+	defer respBody.Close()
+
+	return p.parseStreamResponse(respBody, callback)
 }
 
 // SupportsNativeTools returns true (OpenAI supports function calling).
@@ -396,6 +415,43 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body in
 	return respBody, nil
 }
 
+// doStreamRequest makes an HTTP request to the API and returns the response body for streaming.
+func (p *OpenAIProvider) doStreamRequest(ctx context.Context, endpoint string, body interface{}) (io.ReadCloser, error) {
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	baseURL := strings.TrimRight(p.baseURL, "/")
+	url := baseURL + endpoint
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	if strings.Contains(p.baseURL, "openrouter.ai") {
+		req.Header.Set("HTTP-Referer", "https://zeroclaw.dev")
+		req.Header.Set("X-Title", "ZeroClaw")
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return resp.Body, nil
+}
+
 // ============================================================================
 // RESPONSE PARSING
 // ============================================================================
@@ -496,6 +552,109 @@ func (p *OpenAIProvider) parseChatResponse(body []byte) (*core.ChatResponse, err
 	}
 
 	return result, nil
+}
+
+// parseStreamResponse parses the SSE stream from the provider and calls the callback with chunks.
+func (p *OpenAIProvider) parseStreamResponse(body io.Reader, callback core.StreamCallback) (*core.ChatResponse, error) {
+	scanner := bufio.NewScanner(body)
+	var fullText string
+	var currentToolCallID string
+	var currentToolCallName string
+	var currentToolCallArgs string
+	var toolCalls []core.ToolCall
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						ID       string `json:"id"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue // ignore unparseable chunks
+		}
+
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+
+		delta := chunk.Choices[0].Delta
+
+		// Handle text chunks
+		if delta.Content != "" {
+			fullText += delta.Content
+			if callback != nil {
+				callback(delta.Content)
+			}
+		}
+
+		// Handle tool calls delta
+		for _, tc := range delta.ToolCalls {
+			if tc.ID != "" {
+				// New tool call started
+				if currentToolCallID != "" {
+					toolCalls = append(toolCalls, core.ToolCall{
+						ID:        currentToolCallID,
+						Name:      currentToolCallName,
+						Arguments: currentToolCallArgs,
+					})
+				}
+				currentToolCallID = tc.ID
+				currentToolCallName = tc.Function.Name
+				currentToolCallArgs = tc.Function.Arguments
+			} else {
+				// Continuation of arguments
+				currentToolCallArgs += tc.Function.Arguments
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("stream read error: %w", err)
+	}
+
+	// Append the last tool call if any
+	if currentToolCallID != "" {
+		toolCalls = append(toolCalls, core.ToolCall{
+			ID:        currentToolCallID,
+			Name:      currentToolCallName,
+			Arguments: currentToolCallArgs,
+		})
+	}
+
+	// Check manual extraction fallback if text has json tool format
+	if len(toolCalls) == 0 && fullText != "" && strings.Contains(fullText, "\"tool\"") {
+		toolCalls = p.attemptExtractToolCallFromText(fullText)
+		if len(toolCalls) > 0 {
+			fullText = ""
+		}
+	}
+	
+	textResult := fullText
+	
+	return &core.ChatResponse{
+		Text:      &textResult,
+		ToolCalls: toolCalls,
+	}, nil
 }
 
 // attemptExtractToolCallFromText tries to parse raw JSON from text if native tool calls failed.

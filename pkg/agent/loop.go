@@ -116,7 +116,7 @@ func NewAgent(
 
 // Run executes the agent loop for a user message.
 // This is the main entry point.
-func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
+func (a *Agent) Run(ctx context.Context, message string, streamCallback core.StreamCallback) (*Result, error) {
 	// Create timeout context
 	ctx, cancel := context.WithTimeout(ctx, a.config.Timeout)
 	defer cancel()
@@ -152,7 +152,7 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 	systemPrompt := a.buildPrompt(memories)
 
 	// STEP 4: Run tool-calling loop
-	response, iterations, toolCalls, err := a.runLoop(ctx, systemPrompt, message, recentHistory)
+	response, iterations, toolCalls, err := a.runLoop(ctx, systemPrompt, message, recentHistory, streamCallback)
 	if err != nil {
 		return nil, fmt.Errorf("agent loop failed: %w", err)
 	}
@@ -174,7 +174,7 @@ func (a *Agent) Run(ctx context.Context, message string) (*Result, error) {
 // ============================================================================
 
 // runLoop executes the iterative tool-calling loop.
-func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, history []core.MemoryEntry) (string, int, []string, error) {
+func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, history []core.MemoryEntry, streamCallback core.StreamCallback) (string, int, []string, error) {
 	// Build initial messages
 	messages := []core.ChatMessage{
 		core.NewSystemMessage(systemPrompt),
@@ -202,8 +202,10 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 	for iterations < a.config.MaxIterations {
 		iterations++
 
-		// Call provider
-		resp, err := a.provider.Chat(ctx, messages, toolSpecs, a.config.Model, a.config.Temperature)
+		// Call provider. Use streamCallback only if we are taking the first response or if there are no tools? 
+		// Actually, we can just pass the streamCallback always. If it's a tool call, streamCallback receives nothing (because delta.content is empty) 
+		// or it receives the "thought process" which is good!
+		resp, err := a.provider.ChatStream(ctx, messages, toolSpecs, a.config.Model, a.config.Temperature, streamCallback)
 		if err != nil {
 			return "", iterations, toolCallsMade, fmt.Errorf("provider error: %w", err)
 		}
@@ -252,7 +254,7 @@ func (a *Agent) runLoop(ctx context.Context, systemPrompt, userMessage string, h
 		// Add explicit instruction to NOT use tools in the final call
 		messages = append(messages, core.NewUserMessage(
 			"Please provide your final answer now based on the tool results above. Do NOT call any more tools. Respond directly in natural language."))
-		finalResp, err := a.provider.Chat(ctx, messages, nil, a.config.Model, a.config.Temperature)
+		finalResp, err := a.provider.ChatStream(ctx, messages, nil, a.config.Model, a.config.Temperature, streamCallback)
 		if err != nil {
 			return "", iterations, toolCallsMade, fmt.Errorf("final provider error: %w", err)
 		}
@@ -485,5 +487,5 @@ func Run(
 	config *Config,
 ) (*Result, error) {
 	agent := NewAgent(memory, provider, tools, config, nil)
-	return agent.Run(ctx, message)
+	return agent.Run(ctx, message, nil)
 }

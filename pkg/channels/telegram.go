@@ -96,6 +96,97 @@ func (c *TelegramChannel) Send(recipient, message string) error {
 	return nil
 }
 
+// SendWithID sends a message and returns its message ID.
+func (c *TelegramChannel) SendWithID(recipient, message string) (int, error) {
+	if c.botToken == "" {
+		return 0, fmt.Errorf("TELEGRAM_BOT_TOKEN not configured")
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", c.botToken)
+
+	payload := map[string]interface{}{
+		"chat_id":    recipient,
+		"text":       message,
+		"parse_mode": "Markdown",
+		"disable_web_page_preview": true,
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return 0, fmt.Errorf("failed to send message: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode >= 400 {
+		return 0, fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var parsedResp struct {
+		Ok     bool `json:"ok"`
+		Result struct {
+			MessageID int `json:"message_id"`
+		} `json:"result"`
+	}
+
+	if err := json.Unmarshal(respBody, &parsedResp); err != nil {
+		return 0, fmt.Errorf("failed to parse message ID: %w", err)
+	}
+
+	if !parsedResp.Ok {
+		return 0, fmt.Errorf("telegram returned ok=false")
+	}
+
+	return parsedResp.Result.MessageID, nil
+}
+
+// EditMessage updates an existing message with new content.
+func (c *TelegramChannel) EditMessage(recipient string, messageID int, message string) error {
+	if c.botToken == "" {
+		return fmt.Errorf("TELEGRAM_BOT_TOKEN not configured")
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", c.botToken)
+
+	payload := map[string]interface{}{
+		"chat_id":    recipient,
+		"message_id": messageID,
+		"text":       message,
+		"parse_mode": "Markdown",
+		"disable_web_page_preview": true,
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to edit message: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram edit API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
 // SendWithKeyboard sends a message with an inline keyboard.
 func (c *TelegramChannel) SendWithKeyboard(recipient, message string, buttons [][]TelegramButton) error {
 	if c.botToken == "" {

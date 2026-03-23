@@ -231,6 +231,9 @@ type Memory interface {
 	HealthCheck(ctx context.Context) bool
 }
 
+// StreamCallback is a function that receives text chunks as they are generated.
+type StreamCallback func(chunk string)
+
 // Provider is the interface for LLM providers (e.g., OpenAI, Anthropic).
 type Provider interface {
 	// Name returns the provider name (e.g., "openai", "anthropic").
@@ -247,6 +250,9 @@ type Provider interface {
 
 	// Chat performs a structured chat for agent loop callers.
 	Chat(ctx context.Context, messages []ChatMessage, tools []ToolSpec, model string, temperature float64) (*ChatResponse, error)
+
+	// ChatStream performs a structured chat and streams text content to a callback.
+	ChatStream(ctx context.Context, messages []ChatMessage, tools []ToolSpec, model string, temperature float64, callback StreamCallback) (*ChatResponse, error)
 
 	// SupportsNativeTools returns true if the provider supports native tool calling.
 	SupportsNativeTools() bool
