@@ -208,6 +208,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var streamCallback core.StreamCallback
 	var msgIDForTelegram int
 	var isDiscordStreaming bool
+	var updatesCount int
 
 	if responseChannel != nil && responseRecipient != "" {
 		if chName := responseChannel.Name(); chName == "telegram" {
@@ -224,9 +225,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 					mu.Lock()
 					defer mu.Unlock()
 					currentText += chunk
-					if time.Since(lastEdit) >= 1500*time.Millisecond && strings.TrimSpace(currentText) != "" {
+					
+					threshold := time.Duration(1500+(updatesCount*500)) * time.Millisecond
+					if threshold > 4000*time.Millisecond {
+						threshold = 4000 * time.Millisecond
+					}
+
+					if time.Since(lastEdit) >= threshold && strings.TrimSpace(currentText) != "" {
 						tc.EditMessage(responseRecipient, msgID, currentText+" ✍️")
 						lastEdit = time.Now()
+						updatesCount++
 					}
 				}
 			} else {
@@ -247,9 +255,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 					mu.Lock()
 					defer mu.Unlock()
 					currentText += chunk
-					if time.Since(lastEdit) >= 1500*time.Millisecond && strings.TrimSpace(currentText) != "" {
+					
+					threshold := time.Duration(1500+(updatesCount*500)) * time.Millisecond
+					if threshold > 4000*time.Millisecond {
+						threshold = 4000 * time.Millisecond
+					}
+
+					if time.Since(lastEdit) >= threshold && strings.TrimSpace(currentText) != "" {
 						dc.EditInteractionResponse(appID, token, currentText+" ✍️")
 						lastEdit = time.Now()
+						updatesCount++
 					}
 				}
 			}
@@ -264,7 +279,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process message synchronously (Vercel freezes after response)
-	response, err := processMessage(ctx, incomingMsg, streamCallback)
+	response, ag, err := processMessage(ctx, incomingMsg, streamCallback)
 	if err != nil {
 		log.Printf("ZeroClaw: ERROR - Processing failed: %v", err)
 		if strings.Contains(err.Error(), "context deadline exceeded") {
@@ -295,6 +310,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	// Log timing
 	duration := time.Since(startTime)
 	log.Printf("ZeroClaw: Request completed in %v", duration)
+
+	// Store conversation in DB *after* sending response to user to reduce perceived latency
+	if ag != nil && len(incomingMsg.Text) >= 1 {
+		ag.StoreConversation(incomingMsg.Text, response)
+	}
 
 	// Return 200 OK to platform
 	w.WriteHeader(http.StatusOK)
@@ -558,7 +578,7 @@ func autoDetectChannel(body []byte, w http.ResponseWriter, r *http.Request) (*ch
 // ============================================================================
 
 // processMessage runs the agent loop to process an incoming message.
-func processMessage(ctx context.Context, msg *channels.IncomingMessage, streamCallback core.StreamCallback) (string, error) {
+func processMessage(ctx context.Context, msg *channels.IncomingMessage, streamCallback core.StreamCallback) (string, *agent.Agent, error) {
 	sessionID := os.Getenv("MASTER_SESSION_ID")
 	if sessionID == "" {
 		sessionID = "global_master_memory"
@@ -586,16 +606,16 @@ func processMessage(ctx context.Context, msg *channels.IncomingMessage, streamCa
 	// Run agent loop
 	result, err := ag.Run(ctx, msg.Text, streamCallback)
 	if err != nil {
-		return "", fmt.Errorf("agent execution failed: %w", err)
+		return "", ag, fmt.Errorf("agent execution failed: %w", err)
 	}
 
-	return result.Response, nil
+	return result.Response, ag, nil
 }
 
 // processAndRespond processes a message and sends response asynchronously.
 // Used for platforms like Discord that require immediate ACK.
 func processAndRespond(ctx context.Context, msg *channels.IncomingMessage, ch channels.Channel, recipient string) {
-	response, err := processMessage(ctx, msg, nil) // Fallback processing
+	response, ag, err := processMessage(ctx, msg, nil) // Fallback processing
 	if err != nil {
 		log.Printf("ZeroClaw: ERROR - Async processing failed: %v", err)
 		if strings.Contains(err.Error(), "context deadline exceeded") {
@@ -609,6 +629,11 @@ func processAndRespond(ctx context.Context, msg *channels.IncomingMessage, ch ch
 		if err := ch.Send(recipient, response); err != nil {
 			log.Printf("ZeroClaw: ERROR - Failed to send async response: %v", err)
 		}
+	}
+
+	// Store in DB after sending!
+	if ag != nil && len(msg.Text) >= 1 {
+		ag.StoreConversation(msg.Text, response)
 	}
 }
 

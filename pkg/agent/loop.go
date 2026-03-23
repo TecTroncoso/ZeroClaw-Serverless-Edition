@@ -78,11 +78,12 @@ type Result struct {
 
 // Agent orchestrates the conversation flow.
 type Agent struct {
-	memory   core.Memory
-	provider core.Provider
-	tools    map[string]core.Tool
-	config   *Config
-	identity *core.IdentityConfig
+	memory                core.Memory
+	provider              core.Provider
+	tools                 map[string]core.Tool
+	config                *Config
+	identity              *core.IdentityConfig
+	currentQueryEmbedding []float32
 }
 
 // NewAgent creates a new agent with dependencies.
@@ -161,10 +162,8 @@ func (a *Agent) Run(ctx context.Context, message string, streamCallback core.Str
 	result.Iterations = iterations
 	result.ToolCalls = toolCalls
 
-	// STEP 5: Store conversation (synchronous - required for serverless)
-	if len(message) >= MinMessageCharsForMemory {
-		a.storeConversation(message, response)
-	}
+	// STEP 5: Store conversation is now properly decoupled.
+	// It will be called by webhook.go *after* sending the response to the user.
 
 	return result, nil
 }
@@ -357,6 +356,18 @@ func (a *Agent) recallMemory(ctx context.Context, query string) ([]core.MemoryEn
 	}
 
 	sessionID := a.config.SessionID
+	
+	// Generate embedding here and store it for reuse in StoreConversation
+	if embedding, err := a.provider.GetEmbedding(ctx, query); err == nil {
+		a.currentQueryEmbedding = embedding
+		memories, err := a.memory.RecallWithEmbedding(ctx, embedding, 10, &sessionID)
+		if err != nil {
+			return nil, err
+		}
+		return memories, nil
+	}
+
+	// Fallback to regular Recall (which might use FTS) if embedding fails
 	memories, err := a.memory.Recall(ctx, query, 10, &sessionID)
 	if err != nil {
 		return nil, err
@@ -365,8 +376,8 @@ func (a *Agent) recallMemory(ctx context.Context, query string) ([]core.MemoryEn
 	return memories, nil
 }
 
-// storeConversation saves to memory asynchronously.
-func (a *Agent) storeConversation(userMessage, assistantResponse string) {
+// StoreConversation saves to memory, reusing the query embedding if available.
+func (a *Agent) StoreConversation(userMessage, assistantResponse string) {
 	if a.memory == nil {
 		return
 	}
@@ -376,13 +387,19 @@ func (a *Agent) storeConversation(userMessage, assistantResponse string) {
 	sessionID := a.config.SessionID
 	timestamp := time.Now().UnixNano()
 
-	// Store user message
+	// Store user message, reusing the embedding to save latency & API calls
 	userKey := fmt.Sprintf("conv_%s_%d", sessionID, timestamp)
-	if err := a.memory.Store(ctx, userKey, userMessage, core.MemoryCategoryConversation, &sessionID); err != nil {
-		log.Printf("[agent] WARNING - failed to store user memory: %v", err)
+	if len(a.currentQueryEmbedding) > 0 {
+		if err := a.memory.StoreWithEmbedding(ctx, userKey, userMessage, core.MemoryCategoryConversation, &sessionID, a.currentQueryEmbedding); err != nil {
+			log.Printf("[agent] WARNING - failed to store user memory with embedding: %v", err)
+		}
+	} else {
+		if err := a.memory.Store(ctx, userKey, userMessage, core.MemoryCategoryConversation, &sessionID); err != nil {
+			log.Printf("[agent] WARNING - failed to store user memory: %v", err)
+		}
 	}
 
-	// Store assistant response
+	// Store assistant response (generates its own new embedding)
 	assistantKey := fmt.Sprintf("conv_%s_%d_resp", sessionID, timestamp)
 	if err := a.memory.Store(ctx, assistantKey, assistantResponse, core.MemoryCategoryConversation, &sessionID); err != nil {
 		log.Printf("[agent] WARNING - failed to store assistant memory: %v", err)

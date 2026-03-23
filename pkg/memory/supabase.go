@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zeroclaw/zeroclaw-go/pkg/core"
@@ -141,15 +142,30 @@ func (m *SupabaseMemory) Store(ctx context.Context, key, content string, categor
 
 	// Multiple chunks: store each with a suffixed key
 	log.Printf("ZeroClaw: Smart Chunking split content into %d chunks (key=%s)", len(chunks), key)
+	
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+	
 	for i, chunk := range chunks {
-		chunkKey := fmt.Sprintf("%s_chunk_%d", key, i)
-		if err := m.storeSingleEntry(ctx, chunkKey, chunk, category, sessionID); err != nil {
-			log.Printf("Warning: failed to store chunk %d/%d for key=%s: %v", i+1, len(chunks), key, err)
-			// Continue storing remaining chunks even if one fails
-		}
+		wg.Add(1)
+		go func(idx int, cText string) {
+			defer wg.Done()
+			chunkKey := fmt.Sprintf("%s_chunk_%d", key, idx)
+			if err := m.storeSingleEntry(ctx, chunkKey, cText, category, sessionID); err != nil {
+				log.Printf("Warning: failed to store chunk %d/%d for key=%s: %v", idx+1, len(chunks), key, err)
+				
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+		}(i, chunk)
 	}
 
-	return nil
+	wg.Wait()
+	return firstErr
 }
 
 // storeSingleEntry stores a single memory entry, computing an embedding if available.
