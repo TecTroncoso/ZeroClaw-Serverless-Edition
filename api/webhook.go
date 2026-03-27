@@ -209,6 +209,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var msgIDForTelegram int
 	var isDiscordStreaming bool
 	var updatesCount int
+	var editWg sync.WaitGroup
 
 	if responseChannel != nil && responseRecipient != "" {
 		if chName := responseChannel.Name(); chName == "telegram" {
@@ -232,7 +233,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 					}
 
 					if time.Since(lastEdit) >= threshold && strings.TrimSpace(currentText) != "" {
-						tc.EditMessage(responseRecipient, msgID, currentText+" ✍️")
+						textToEdit := currentText + " ✍️"
+						editWg.Add(1)
+						go func() {
+							defer editWg.Done()
+							tc.EditMessage(responseRecipient, msgID, textToEdit)
+						}()
 						lastEdit = time.Now()
 						updatesCount++
 					}
@@ -262,7 +268,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 					}
 
 					if time.Since(lastEdit) >= threshold && strings.TrimSpace(currentText) != "" {
-						dc.EditInteractionResponse(appID, token, currentText+" ✍️")
+						textToEdit := currentText + " ✍️"
+						editWg.Add(1)
+						go func() {
+							defer editWg.Done()
+							dc.EditInteractionResponse(appID, token, textToEdit)
+						}()
 						lastEdit = time.Now()
 						updatesCount++
 					}
@@ -315,6 +326,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if ag != nil && len(incomingMsg.Text) >= 1 {
 		ag.StoreConversation(incomingMsg.Text, response)
 	}
+
+	// Wait for any pending message edits to finish before releasing the handler
+	editWg.Wait()
 
 	// Return 200 OK to platform
 	w.WriteHeader(http.StatusOK)
@@ -447,7 +461,12 @@ func triggerDiscordBackgroundWorker(r *http.Request, body []byte) {
 	// Damos 1 segundo para que la petición salga. Aunque el cliente corte (y dé timeout), 
 	// el servidor destino ya habrá comenzado gracias al context.Background()
 	client := &http.Client{Timeout: 1 * time.Second}
-	client.Do(req)
+	resp, err := client.Do(req)
+	if err == nil && resp != nil {
+		if resp.Body != nil {
+			resp.Body.Close()
+		}
+	}
 }
 
 // handleSlack processes a Slack event.

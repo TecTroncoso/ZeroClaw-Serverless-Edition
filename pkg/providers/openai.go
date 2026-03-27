@@ -657,10 +657,11 @@ func (p *OpenAIProvider) parseStreamResponse(body io.Reader, callback core.Strea
 	}, nil
 }
 
+var reJSONBlock = regexp.MustCompile(`(?s)\x60\x60\x60(?:json)?\s*(\{.*?\})\s*\x60\x60\x60`)
+
 // attemptExtractToolCallFromText tries to parse raw JSON from text if native tool calls failed.
 func (p *OpenAIProvider) attemptExtractToolCallFromText(text string) []core.ToolCall {
 	// Look for ```json ... ``` blocks
-	reJSONBlock := regexp.MustCompile(`(?s)\x60\x60\x60(?:json)?\s*(\{.*?\})\s*\x60\x60\x60`)
 	matches := reJSONBlock.FindStringSubmatch(text)
 	
 	jsonStr := ""

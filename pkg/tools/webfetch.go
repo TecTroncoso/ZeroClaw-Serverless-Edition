@@ -21,6 +21,21 @@ import (
 // WEB FETCH TOOL
 // ============================================================================
 
+var (
+	scriptPattern     = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`)
+	stylePattern      = regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`)
+	navPattern        = regexp.MustCompile(`(?is)<nav[^>]*>.*?</nav>`)
+	footerPattern     = regexp.MustCompile(`(?is)<footer[^>]*>.*?</footer>`)
+	headerPattern     = regexp.MustCompile(`(?is)<header[^>]*>.*?</header>`)
+	asidePattern      = regexp.MustCompile(`(?is)<aside[^>]*>.*?</aside>`)
+	commentPattern    = regexp.MustCompile(`(?is)<!--.*?-->`)
+	blockElements     = regexp.MustCompile(`(?i)</?(div|p|br|h[1-6]|li|tr|td|th|article|section|main|address)`)
+	tagPattern        = regexp.MustCompile(`<[^>]+>`)
+	numPattern        = regexp.MustCompile(`&#(\d+);`)
+	hexPattern        = regexp.MustCompile(`&#x([0-9a-fA-F]+);`)
+	whitespacePattern = regexp.MustCompile(`[ \t]+`)
+)
+
 // WebFetchTool implements the Tool interface for fetching web page content.
 // It retrieves URLs, cleans HTML, and returns text content suitable for LLM consumption.
 type WebFetchTool struct {
@@ -229,39 +244,30 @@ func (t *WebFetchTool) cleanHTML(html string) string {
 	_ = strings.ToLower(html) // htmlLower unused but kept for reference
 
 	// Remove script tags and their content
-	scriptPattern := regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`)
 	html = scriptPattern.ReplaceAllString(html, "")
 
 	// Remove style tags and their content
-	stylePattern := regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`)
 	html = stylePattern.ReplaceAllString(html, "")
 
 	// Remove nav tags and their content
-	navPattern := regexp.MustCompile(`(?is)<nav[^>]*>.*?</nav>`)
 	html = navPattern.ReplaceAllString(html, "")
 
 	// Remove footer tags and their content
-	footerPattern := regexp.MustCompile(`(?is)<footer[^>]*>.*?</footer>`)
 	html = footerPattern.ReplaceAllString(html, "")
 
 	// Remove header tags and their content
-	headerPattern := regexp.MustCompile(`(?is)<header[^>]*>.*?</header>`)
 	html = headerPattern.ReplaceAllString(html, "")
 
 	// Remove aside tags and their content
-	asidePattern := regexp.MustCompile(`(?is)<aside[^>]*>.*?</aside>`)
 	html = asidePattern.ReplaceAllString(html, "")
 
 	// Remove comments
-	commentPattern := regexp.MustCompile(`(?is)<!--.*?-->`)
 	html = commentPattern.ReplaceAllString(html, "")
 
 	// Replace common block elements with newlines
-	blockElements := regexp.MustCompile(`(?i)</?(div|p|br|h[1-6]|li|tr|td|th|article|section|main|address)`)
 	html = blockElements.ReplaceAllString(html, "\n")
 
 	// Remove all remaining HTML tags
-	tagPattern := regexp.MustCompile(`<[^>]+>`)
 	html = tagPattern.ReplaceAllString(html, "")
 
 	// Decode HTML entities
@@ -302,14 +308,12 @@ func decodeHTMLEntities(s string) string {
 	}
 
 	// Handle numeric entities (&#nnn; and &#xhh;)
-	numPattern := regexp.MustCompile(`&#(\d+);`)
 	s = numPattern.ReplaceAllStringFunc(s, func(match string) string {
 		var code int
 		fmt.Sscanf(match, "&#%d;", &code)
 		return string(rune(code))
 	})
 
-	hexPattern := regexp.MustCompile(`&#x([0-9a-fA-F]+);`)
 	s = hexPattern.ReplaceAllStringFunc(s, func(match string) string {
 		var code int
 		fmt.Sscanf(match, "&#x%x;", &code)
@@ -322,7 +326,6 @@ func decodeHTMLEntities(s string) string {
 // cleanWhitespace reduces multiple whitespace to single spaces and trims.
 func cleanWhitespace(s string) string {
 	// Replace multiple whitespace with single space
-	whitespacePattern := regexp.MustCompile(`[ \t]+`)
 	s = whitespacePattern.ReplaceAllString(s, " ")
 
 	// Split into lines, clean each, rejoin

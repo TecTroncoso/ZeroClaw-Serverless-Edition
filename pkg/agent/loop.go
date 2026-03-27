@@ -126,28 +126,42 @@ func (a *Agent) Run(ctx context.Context, message string, streamCallback core.Str
 		SessionID: a.config.SessionID,
 	}
 
+	var memories []core.MemoryEntry
+	var recentHistory []core.MemoryEntry
+
+	var wg sync.WaitGroup
+
 	// STEP 1: Retrieve memory context
-	memories, err := a.recallMemory(ctx, message)
-	if err != nil {
-		// Log but continue without context
-		fmt.Printf("[agent] memory recall error: %v\n", err)
-	}
-	result.MemoriesFound = len(memories)
-	
-	// Debug log for memory injection
-	log.Printf("DEBUG: Injecting %d memories into prompt context", len(memories))
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		mems, err := a.recallMemory(ctx, message)
+		if err != nil {
+			// Log but continue without context
+			fmt.Printf("[agent] memory recall error: %v\n", err)
+		} else {
+			memories = mems
+			log.Printf("DEBUG: Injecting %d memories into prompt context", len(memories))
+		}
+	}()
 
 	// STEP 2: Retrieve recent history (matches MaxHistoryMessages to avoid wasting network)
-	var recentHistory []core.MemoryEntry
-	if a.memory != nil && a.config.SessionID != "" {
-		history, err := a.memory.GetRecentHistory(ctx, &a.config.SessionID, MaxHistoryMessages)
-		if err != nil {
-			fmt.Printf("[agent] history retrieval error: %v\n", err)
-		} else {
-			recentHistory = history
-			log.Printf("DEBUG: Found %d recent history messages", len(recentHistory))
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if a.memory != nil && a.config.SessionID != "" {
+			history, err := a.memory.GetRecentHistory(ctx, &a.config.SessionID, MaxHistoryMessages)
+			if err != nil {
+				fmt.Printf("[agent] history retrieval error: %v\n", err)
+			} else {
+				recentHistory = history
+				log.Printf("DEBUG: Found %d recent history messages", len(recentHistory))
+			}
 		}
-	}
+	}()
+
+	wg.Wait()
+	result.MemoriesFound = len(memories)
 
 	// STEP 3: Build system prompt
 	systemPrompt := a.buildPrompt(memories)
@@ -446,24 +460,28 @@ func (a *Agent) truncateHistory(messages []core.ChatMessage) []core.ChatMessage 
 
 // sanitizeResponse strips any leaked tool call artifacts from the final response.
 // Qwen/Cerebras models sometimes include raw tool call XML/JSON in their text output.
+var (
+	toolCallPattern        = regexp.MustCompile(`(?s)<tool_call>.*?</tool_call>`)
+	jsonToolPattern        = regexp.MustCompile(`(?s)\{"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\}\}`)
+	jsonNamePattern        = regexp.MustCompile(`(?s)\{"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\}\}`)
+	whitespaceBlockPattern = regexp.MustCompile(`\n{3,}`)
+)
+
 func sanitizeResponse(text string) string {
 	// Remove <tool_call>...</tool_call> blocks
-	toolCallPattern := regexp.MustCompile(`(?s)<tool_call>.*?</tool_call>`)
 	text = toolCallPattern.ReplaceAllString(text, "")
 
 	// Remove [Tool calls made] markers
 	text = strings.ReplaceAll(text, "[Tool calls made]", "")
 
 	// Remove {"tool": ...} JSON blocks that leaked into text
-	jsonToolPattern := regexp.MustCompile(`(?s)\{"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\}\}`)
 	text = jsonToolPattern.ReplaceAllString(text, "")
 
 	// Remove {"name": ...} tool call blocks
-	jsonNamePattern := regexp.MustCompile(`(?s)\{"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\}\}`)
 	text = jsonNamePattern.ReplaceAllString(text, "")
 
 	// Clean up excessive whitespace left behind
-	text = regexp.MustCompile(`\n{3,}`).ReplaceAllString(text, "\n\n")
+	text = whitespaceBlockPattern.ReplaceAllString(text, "\n\n")
 	text = strings.TrimSpace(text)
 
 	return text
