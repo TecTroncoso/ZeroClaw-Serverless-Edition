@@ -98,6 +98,8 @@ func init() {
 		tools.NewWebSearchTool(),
 		tools.NewWebFetchTool(),
 		tools.NewHTTPRequestTool(),
+		tools.NewSendEmailTool(),
+		tools.NewMakeCalendarTool(),
 	}
 	log.Printf("ZeroClaw: %d tools registered", len(toolz))
 

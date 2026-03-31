@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // ============================================================================
@@ -147,6 +148,10 @@ func (b *SystemPromptBuilder) Build() string {
 		}
 		sb.WriteString("\n")
 	}
+
+	// Dynamic time context for the AI
+	sb.WriteString("## Current Date & Time\n\n")
+	sb.WriteString(fmt.Sprintf("Current date and time in Argentina: %s\n\n", time.Now().In(time.FixedZone("ART", -3*3600)).Format(time.RFC1123)))
 
 	// 3. Extra context (if any)
 	if b.extraCtx != "" {
