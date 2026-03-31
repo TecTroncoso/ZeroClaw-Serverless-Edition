@@ -84,6 +84,7 @@ ZeroClaw incorpora herramientas eficientes (*Tools/Functions*) blindadas con str
 4. **Email & Agenda (`send_email`, `schedule_calendar_event`)**:
    - El agente envía correos usando estándares de Go `net/smtp` vía credenciales estables, con cero dependencias ajenas.
    - Crea eventos de calendario disparando **Make.com Webhooks**, salvaguardando al proyecto de pesar cientos de megas (evitando SDKs masivos de la nube).
+5. **🧠 Arquitectura de Cerebro Dividido (Split Providers)**: El framework permite configurar un modelo ultrarrápido para razonar (ej: Groq con Llama-3, Cerebras, xAI) y un modelo gratuito completamente diferente exclusivamente para vectorizar la memoria (ej: OpenAI `text-embedding-3-small`, Google Gemini o NVIDIA vía OpenRouter). Esto maximiza la velocidad de respuesta y reduce los costos de embedding a prácticamente cero, ya que cada proveedor se configura de forma independiente con sus propias variables (`OPENAI_*` para Chat, `EMBEDDING_*` para vectorización).
 
 *Todo gestionado por el adaptador `api/webhook.go` y orquestado en `pkg/agent/loop.go`.*
 
@@ -173,7 +174,7 @@ Añade las siguientes **Variables de Entorno** en la pestaña de configuración 
 
 > ⚠️ **Nota sobre Tiempos de Ejecución en Vercel**
 >
-> El archivo `vercel.json` configura `maxDuration: 60`, lo que aprovecha el tiempo máximo de ejecución permitido por el plan gratuito (Hobby) de Vercel. Esto es **vital** para darle tiempo suficiente al LLM de razonar, ejecutar herramientas encadenadas y devolver una respuesta completa sin que Vercel corte la conexión prematuramente.
+> El archivo `vercel.json` configura `maxDuration: 60`. El plan gratuito **Hobby** de Vercel permite funciones en Go de hasta **60 segundos**, que es exactamente lo que aprovechamos. Esto es **vital** para que el Agente tenga tiempo suficiente de razonar, navegar por internet, ejecutar herramientas encadenadas y devolver una respuesta completa sin que Vercel corte la conexión prematuramente. Si tu proyecto estuviera en un plan inferior sin esta capacidad, el LLM podría ser interrumpido a mitad de una búsqueda web o del envío de un email.
 
 ### 3. Configurar Webhooks de Canales (Uso)
 
