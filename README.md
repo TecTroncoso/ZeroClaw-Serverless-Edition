@@ -168,6 +168,12 @@ Añade las siguientes **Variables de Entorno** en la pestaña de configuración 
 | `SMTP_PASSWORD` | Clave de 16 letras | Autenticación SMTP (App Password de Google). |
 | `SMTP_HOST` | `smtp.gmail.com` | Host principal de conexión de correo (default). |
 | `SMTP_PORT` | `587` | Puerto de salida seguro del servidor de correos (default). |
+| `MASTER_SESSION_ID` | `mi_bot_global` (opcional) | Unifica la memoria del agente entre canales. Si se configura, el bot compartirá el mismo historial y recuerdos sin importar si el usuario le habla por Telegram o Discord. |
+| `AIEOS_PROFILE` | `{"identity":{...}}` (opcional) | Permite inyectar un JSON personalizado para cambiar la identidad y psicología del bot (nombre, rol, personalidad). |
+
+> ⚠️ **Nota sobre Tiempos de Ejecución en Vercel**
+>
+> El archivo `vercel.json` configura `maxDuration: 60`, lo que aprovecha el tiempo máximo de ejecución permitido por el plan gratuito (Hobby) de Vercel. Esto es **vital** para darle tiempo suficiente al LLM de razonar, ejecutar herramientas encadenadas y devolver una respuesta completa sin que Vercel corte la conexión prematuramente.
 
 ### 3. Configurar Webhooks de Canales (Uso)
 
