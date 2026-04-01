@@ -178,8 +178,8 @@ func (t *HTTPRequestTool) Execute(ctx context.Context, args map[string]interface
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	respBody, err := io.ReadAll(resp.Body)
+	// Read response body (capped at 512KB to prevent OOM in serverless)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}

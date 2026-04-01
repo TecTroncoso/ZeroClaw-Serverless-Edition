@@ -240,9 +240,6 @@ func (t *WebFetchTool) Spec() core.ToolSpec {
 
 // cleanHTML removes HTML tags and extracts readable text content.
 func (t *WebFetchTool) cleanHTML(html string) string {
-	// Convert to lowercase for tag matching
-	_ = strings.ToLower(html) // htmlLower unused but kept for reference
-
 	// Remove script tags and their content
 	html = scriptPattern.ReplaceAllString(html, "")
 
