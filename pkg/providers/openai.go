@@ -192,33 +192,11 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 		return nil, err
 	}
 
-	// Log only essential info to avoid excessive debug output
-	if len(resp) > 0 {
-		// Log just the length and first few values to verify response structure
-		var tempResp struct {
-			Object string `json:"object"`
-			Data   []struct {
-				Object string    `json:"object"`
-				Embedding []float32 `json:"embedding"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(resp, &tempResp); err == nil && len(tempResp.Data) > 0 {
-			embLen := len(tempResp.Data[0].Embedding)
-			firstVals := tempResp.Data[0].Embedding
-			if len(firstVals) > 5 {
-				firstVals = firstVals[:5]
-			}
-			fmt.Printf("DEBUG: Provider response (embeddings), length: %d, first_vals: %v\n", embLen, firstVals)
-		} else {
-			fmt.Printf("DEBUG: Provider response (embeddings), raw length: %d\n", len(resp))
-		}
-	}
-
 	if len(resp) == 0 {
 		return nil, fmt.Errorf("empty response from provider")
 	}
 
-	// Parse embedding response
+	// Single parse of embedding response (avoid double deserialization)
 	var embResp struct {
 		Data []struct {
 			Embedding []float32 `json:"embedding"`
@@ -232,6 +210,8 @@ func (p *OpenAIProvider) GetEmbedding(ctx context.Context, text string) ([]float
 	if len(embResp.Data) == 0 || len(embResp.Data[0].Embedding) == 0 {
 		return nil, fmt.Errorf("no embedding returned in valid JSON")
 	}
+
+	log.Printf("DEBUG: Embedding received, dims=%d", len(embResp.Data[0].Embedding))
 
 	return embResp.Data[0].Embedding, nil
 }

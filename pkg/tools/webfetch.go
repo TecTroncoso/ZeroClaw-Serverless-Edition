@@ -212,8 +212,8 @@ func (t *WebFetchTool) fetchSingleURL(ctx context.Context, targetURL string) (st
 		return "", fmt.Errorf("HTTP error: %s", resp.Status)
 	}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body (capped at 512KB to prevent OOM in serverless with 256MB RAM)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}

@@ -503,20 +503,23 @@ func (m *SupabaseMemory) scanMemoryEntry(scanner interface {
 }
 
 // embeddingToPostgresArray converts a float32 slice to PostgreSQL array format.
+// Uses strings.Builder with pre-allocation to avoid O(n²) string concatenation.
 func (m *SupabaseMemory) embeddingToPostgresArray(embedding []float32) string {
 	if len(embedding) == 0 {
 		return "[]"
 	}
 
-	result := "["
+	var sb strings.Builder
+	sb.Grow(len(embedding) * 12) // Pre-allocate: ~12 chars per float ("0.123456,")
+	sb.WriteByte('[')
 	for i, v := range embedding {
 		if i > 0 {
-			result += ","
+			sb.WriteByte(',')
 		}
-		result += fmt.Sprintf("%f", v)
+		fmt.Fprintf(&sb, "%f", v)
 	}
-	result += "]"
-	return result
+	sb.WriteByte(']')
+	return sb.String()
 }
 
 // ============================================================================
