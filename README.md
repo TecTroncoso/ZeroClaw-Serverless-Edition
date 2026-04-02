@@ -1,200 +1,288 @@
-# 🚀 ZeroClaw Go (Serverless Edition)
-
 <p align="center">
-<img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go" alt="Go Version">
-<img src="https://img.shields.io/badge/Platform-Vercel-000000?style=for-the-badge&logo=vercel" alt="Platform">
-<img src="https://img.shields.io/badge/Database-Supabase-3FCF8E?style=for-the-badge&logo=supabase" alt="Database">
-<img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/Vercel-Serverless-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel">
+  <img src="https://img.shields.io/badge/Supabase-pgvector-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase">
+  <img src="https://img.shields.io/badge/Architecture-Serverless--First-FF6F00?style=for-the-badge&logo=serverless&logoColor=white" alt="Serverless">
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License">
 </p>
 
-**ZeroClaw Go** es un framework de agentes de IA autónomos ultra-ligero, diseñado **exclusivamente** para entornos Serverless y Edge. Construido sobre Go y optimizado para ser desplegado en Vercel, ofrece una arquitectura omni-canal moderna (Telegram, Discord, Slack, WhatsApp) sin la complejidad, latencia ni costos de la infraestructura tradicional.
+<h1 align="center">⚡ ZeroClaw Go — Serverless Edition</h1>
+
+<p align="center">
+  <strong>Framework de Agentes IA Autónomos ultra-ligero, diseñado exclusivamente para Serverless.</strong><br>
+  <sub>100% Go · Cero dependencias pesadas · Cero costos inactivo · Despliega en 5 minutos.</sub>
+</p>
+
+<p align="center">
+  <code>v1.0.0 — Code Freeze</code>
+</p>
 
 ---
 
-## 🎯 ¿Por qué ZeroClaw Go?
+## 🧠 La Arquitectura (Por qué es increíble)
 
-A diferencia de los frameworks de agentes que asumen servidores en ejecución continua (long-polling), ZeroClaw revoluciona el enfoque para el paradigma Serverless:
+ZeroClaw no es otro wrapper de la API de OpenAI. Es un **framework completo de agentes** que piensa, recuerda, busca en internet, envía emails, agenda citas — y lo hace todo dentro de **una sola función serverless de 60 segundos**.
 
-- ⚡ **Latencia Ultra-Baja**: Arquitectura eficiente y *cold starts* mínimos usando el compilador de Go en Vercel.
-- 🪙 **Costo Cero Inactivo**: La concurrencia asíncrona te permite pagar exclusivamente cuando el agente recibe o procesa un mensaje.
-- 🔄 **Workarounds Innovadores en Vercel**: Vercel no permite peticiones superiores a 10s en planes gratuitos, ni streams interactivos asíncronos en Discord. ZeroClaw interviene con patrones *Background Worker* y delegación inteligente de carga.
-- 🧠 **Memoria Híbrida Inteligente**: Integración nativa con **Supabase (pgvector)** implementando *Reciprocal Rank Fusion* (RRF) y *Smart Chunking* para aunar búsqueda semántica y de texto completo.
+### ☁️ Serverless-First
+
+| Aspecto | Detalle |
+|---|---|
+| **Latencia inactivo** | **$0 / 0ms** — la función solo existe cuando un mensaje llega |
+| **Cold start** | ~200ms gracias al binario compilado de Go (sin intérprete, sin VM) |
+| **Max Duration** | 60s (Vercel Hobby tier Go) — suficiente para 5 iteraciones de tool-calling |
+| **RAM** | 1024MB — protegido con `LimitReader` de 512KB en todas las lecturas HTTP |
+| **Dependencias** | **1 sola** (`lib/pq` para PostgreSQL). Zero bloat |
+
+### 🧬 Cerebro Dividido (Split Providers)
+
+ZeroClaw separa el **razonamiento** de la **vectorización** en dos providers completamente independientes:
+
+```
+┌─────────────────────────────────────────────────┐
+│                   CHAT PROVIDER                  │
+│  Cerebras · Groq · OpenAI · xAI · OpenRouter    │
+│  → Modelo rápido para razonar (ej. Qwen, Llama) │
+│  → OPENAI_API_KEY + OPENAI_BASE_URL             │
+├─────────────────────────────────────────────────┤
+│               EMBEDDING PROVIDER                 │
+│  OpenRouter · OpenAI · Fireworks · Together      │
+│  → Modelo denso para vectorizar (2048 dims)      │
+│  → EMBEDDING_API_KEY + EMBEDDING_BASE_URL        │
+└─────────────────────────────────────────────────┘
+```
+
+**¿Por qué?** Porque el modelo más rápido del mundo para chatear (Cerebras @ 2100 tok/s) no soporta embeddings. Y el mejor modelo gratuito de embeddings (NVIDIA Nemotron 2048d vía OpenRouter) no genera texto. Separándolos, obtienes **velocidad máxima + embeddings de alta dimensionalidad** sin compromiso.
+
+### 🔍 RAG Híbrido (pgvector + FTS con RRF)
+
+La memoria no es un simple `SELECT * WHERE content LIKE '%query%'`. Es un sistema de recuperación de triple vía:
+
+```
+Query del usuario
+       │
+       ├──→  🧲 Vector Search (cosine similarity, 2048 dims)
+       │         └─→ Captura sinónimos, paráfrasis, conceptos similares
+       │
+       ├──→  📝 Full-Text Search (tsvector + websearch_to_tsquery)
+       │         └─→ Captura keywords exactos, acrónimos, nombres propios
+       │
+       └──→  🔀 Reciprocal Rank Fusion (RRF, k=60)
+                 └─→ Combina ambos rankings en un score unificado
+```
+
+Los textos largos se fragmentan automáticamente con **Smart Chunking** (500 chars, 50 overlap) para maximizar la precisión del RAG.
+
+### ⚡ Alto Rendimiento
+
+- **Ejecución paralela de tools** — Si el LLM pide `web_search` + `core_memory_save` simultáneamente, se ejecutan en goroutines concurrentes con `sync.WaitGroup`. Tiempo total = `max(tool_a, tool_b)`, no `sum`.
+- **Streaming con Anti-Flood** — Las respuestas se envían progresivamente editando el mensaje original en Telegram/Discord. El throttle adaptativo empieza en 1.5s y escala hasta 4s para no exceder los rate limits de las plataformas.
+- **Stream Fallback** — Si la conexión SSE se rompe mid-stream (TCP RST, 429), el sistema cae automáticamente a una petición non-streaming con retry integrado (backoff lineal, 2 reintentos).
+- **Embedding reuse** — El embedding generado para buscar en memoria se reutiliza para almacenar el mensaje del usuario, ahorrando 1 API call y ~200ms por request.
+
+---
+
+## 🛠️ Catálogo de Herramientas (Tools)
+
+El agente invoca herramientas de forma autónoma durante su ciclo de razonamiento. Todas están blindadas con `context.WithTimeout` para entornos serverless.
+
+| Herramienta | Descripción | Timeout |
+|---|---|---|
+| 🔎 `web_search` | Busca en la web vía DuckDuckGo (gratis), Tavily o Brave Search. Máx 2 resultados para optimizar tokens. | 5s |
+| 🌐 `web_fetch` | Extrae texto limpio de URLs. Soporta **multi-URL fallback**: si la primera falla, prueba la siguiente. Sanitiza HTML eliminando scripts, nav, footer, ads. Capped a 512KB. | 5s |
+| 📡 `http_request` | Peticiones GET/POST a cualquier API REST con headers customizables. Auto-detecta JSON. Respuesta capped a 512KB. | 8s |
+| 📧 `send_email` | Envía emails vía SMTP nativo de Go (`net/smtp`). Sin SDKs. Soporta Gmail con App Passwords. | 10s |
+| 📅 `schedule_calendar_event` | Agenda eventos en Google Calendar disparando un webhook de Make.com. Zero SDKs de Google Cloud. | 5s |
+| 💾 `core_memory_save` | Guarda hechos importantes del usuario (nombre, preferencias, fechas) en memoria de largo plazo con embeddings vectoriales. | 10s |
+
+> **Nota**: `core_memory_save` se inyecta dinámicamente solo cuando la conexión a Supabase está activa. Si la BD no está disponible, el agente funciona sin memoria (graceful degradation).
+
+---
+
+## ⚙️ Guía de Despliegue (Paso a Paso)
+
+### Paso 1 — Configurar Supabase
+
+1. Crea un nuevo proyecto en [supabase.com](https://supabase.com).
+2. Abre el **SQL Editor** y ejecuta el contenido completo de [`sql/schema_final.sql`](sql/schema_final.sql):
+
+<details>
+<summary>📋 Click para ver el SQL completo (schema_final.sql)</summary>
+
+```sql
+-- Extensión pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Tabla principal
+CREATE TABLE IF NOT EXISTS memory_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key TEXT NOT NULL UNIQUE,
+    content TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'conversation',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    session_id TEXT,
+    embedding vector(2048),
+    score FLOAT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Índices
+CREATE INDEX IF NOT EXISTS idx_memory_entries_key ON memory_entries(key);
+CREATE INDEX IF NOT EXISTS idx_memory_entries_category ON memory_entries(category);
+CREATE INDEX IF NOT EXISTS idx_memory_entries_session_id ON memory_entries(session_id);
+CREATE INDEX IF NOT EXISTS idx_memory_entries_timestamp ON memory_entries(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_entries_content_fts
+ON memory_entries USING GIN (to_tsvector('english', content));
+
+-- Funciones: search_memories, hybrid_search_memories (RRF),
+-- search_memories_fts, count_memories
+-- (ver archivo completo para las definiciones)
+```
+
+</details>
+
+3. Obtén tu **Connection String** en: `Project Settings > Database > Connection String > URI`
+   - Usa **Transaction Mode** (puerto `6543`)
+   - Formato: `postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
+
+### Paso 2 — Desplegar en Vercel
+
+1. Haz Push de tu repositorio a GitHub.
+2. Importa el proyecto en [vercel.com](https://vercel.com) → **New Project**.
+3. **No requiere configuración de build** — Vercel detecta Go automáticamente.
+4. Configura las [Variables de Entorno](#-variables-de-entorno) en `Project Settings > Environment Variables`.
+5. Deploya. Tu endpoint será: `https://<TU-DOMINIO>.vercel.app/api/webhook`
+
+> El archivo `vercel.json` ya configura `maxDuration: 60` para la función.
+
+### Paso 3 — Configurar Webhooks de Canales
+
+**La URL base es siempre:** `https://<TU-DOMINIO>.vercel.app/api/webhook`
+
+#### 🤖 Telegram
+
+Abre esta URL en tu navegador (una vez):
+
+```
+https://api.telegram.org/bot<TU_TOKEN>/setWebhook?url=https://<TU-DOMINIO>.vercel.app/api/webhook?channel=telegram
+```
+
+#### 🎮 Discord
+
+1. En el [Discord Developer Portal](https://discord.com/developers), ve a tu App > **General Information** y copia el `APPLICATION ID` y `PUBLIC KEY`.
+2. En **Installation** > configura la URL de Interactions Endpoint:
+   ```
+   https://<TU-DOMINIO>.vercel.app/api/webhook?channel=discord
+   ```
+3. **Registra el comando `/chat`** visitando esta URL en tu navegador (una sola vez):
+   ```
+   https://<TU-DOMINIO>.vercel.app/api/webhook?setup_discord=true
+   ```
+   Verás un mensaje `✅` confirmando el registro.
+
+---
+
+## 🔑 Variables de Entorno
+
+### Proveedores de IA (Chat)
+
+| Variable | Requerida | Ejemplo | Descripción |
+|---|---|---|---|
+| `OPENAI_API_KEY` | ✅ | `sk-...` | API Key del proveedor LLM para razonamiento |
+| `OPENAI_MODEL` | ❌ | `gpt-4o-mini` | Modelo de chat (default: `gpt-4o-mini`) |
+| `OPENAI_BASE_URL` | ❌ | `https://api.cerebras.ai/v1` | Base URL del provider (default: OpenAI) |
+
+### Proveedores de IA (Embeddings)
+
+| Variable | Requerida | Ejemplo | Descripción |
+|---|---|---|---|
+| `EMBEDDING_API_KEY` | ❌ | `sk-or-...` | API Key separada para embeddings. Si no se configura, usa el Chat Provider |
+| `EMBEDDING_MODEL` | ❌ | `nvidia/llama-nemotron-embed-vl-1b-v2:free` | Modelo de embeddings (default: `text-embedding-3-small`) |
+| `EMBEDDING_BASE_URL` | ❌ | `https://openrouter.ai/api/v1` | Base URL del provider de embeddings |
+
+### Base de Datos
+
+| Variable | Requerida | Ejemplo | Descripción |
+|---|---|---|---|
+| `SUPABASE_DB_URL` | ✅ | `postgresql://...:6543/postgres?sslmode=require` | Connection string de Supabase (Transaction Mode) |
+
+### Canales de Comunicación
+
+| Variable | Requerida | Ejemplo | Descripción |
+|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | ❌ | `123456:ABC-DEF...` | Token del bot de Telegram (@BotFather) |
+| `DISCORD_BOT_TOKEN` | ❌ | `MTIz...` | Token del bot de Discord |
+| `DISCORD_APP_ID` | ❌ | `1122334455...` | Application ID de Discord |
+| `DISCORD_PUBLIC_KEY` | ❌ | `abcdef123...` | Public Key para verificar firmas Ed25519 |
+
+### Email (SMTP)
+
+| Variable | Requerida | Ejemplo | Descripción |
+|---|---|---|---|
+| `SMTP_USER` | ❌ | `tu@gmail.com` | Correo emisor |
+| `SMTP_PASSWORD` | ❌ | `abcdefghijklmnop` | App Password de Google (16 chars) |
+| `SMTP_HOST` | ❌ | `smtp.gmail.com` | Host SMTP (default: `smtp.gmail.com`) |
+| `SMTP_PORT` | ❌ | `587` | Puerto SMTP (default: `587`) |
+
+### Integraciones
+
+| Variable | Requerida | Ejemplo | Descripción |
+|---|---|---|---|
+| `MAKE_CALENDAR_WEBHOOK` | ❌ | `https://hook.us1.make.com/...` | Webhook de Make.com para Google Calendar |
+
+### Avanzado
+
+| Variable | Requerida | Ejemplo | Descripción |
+|---|---|---|---|
+| `SYSTEM_PROMPT` | ❌ | `Eres un asistente...` | Sobrescribe el system prompt completo del agente |
+| `MASTER_SESSION_ID` | ❌ | `mi_bot_global` | Unifica la memoria entre todos los canales |
+| `AIEOS_PROFILE` | ❌ | `{"identity":{...}}` | JSON personalizado de identidad AIEOS v1.1 |
+| `SEARCH_API_KEY` | ❌ | `tvly-...` | API Key para Tavily o Brave Search |
+| `SEARCH_PROVIDER` | ❌ | `duckduckgo` | Provider de búsqueda: `duckduckgo`, `tavily`, `brave` |
 
 ---
 
 ## 📁 Estructura del Proyecto
 
-```text
-C:.
-|   go.mod                  # Dependencias de Go (ultra-ligeras)
-|   README.md               # Este archivo de documentación
-|   vercel.json             # Configuración de despliegue para Vercel
-|
-+---api
-|       webhook.go          # ENTRYPOINT PRINCIPAL para Vercel Serverless Function
-|
-+---cmd
-|   \---register_discord
-|           main.go         # Script de utilidad para registrar Slash Commands en Discord
-|
-+---pkg
-|   +---agent
-|   |       loop.go         # Bucle principal de pensamiento del Agente LLM
-|   |
-|   +---channels
-|   |       common.go       # Estructuras comunes de mensajes (IncomingMessage)
-|   |       discord.go      # Adaptador nativo de Discord (Signature verify, Patch)
-|   |       slack.go        # Adaptador nativo de Slack
-|   |       telegram.go     # Adaptador nativo de Telegram
-|   |       whatsapp.go     # Adaptador nativo de WhatsApp
-|   |
-|   +---core
-|   |       aieos.go        # Carga de perfiles de identidad abstractos
-|   |       identity.go     # Acondicionador del System Prompt del AI (con inyección RTC)
-|   |       interfaces.go   # Tipos fundamentales del Framework
-|   |
-|   +---memory
-|   |       chunker.go      # Fragmentación inteligente de texto (Smart Chunking)
-|   |       supabase.go     # Adaptador completo para Supabase (pgvector)
-|   |
-|   +---providers
-|   |       openai.go       # Adaptador Universal LLM (OpenAI, Groq, OpenRouter, etc)
-|   |
-|   \---tools
-|           httprequest.go  # Herramienta Serverless: Peticiones HTTP genéricas
-|           makecalendar.go # Herramienta Serverless: Scheduler vía Make.com Webhooks
-|           memorystore.go  # Herramienta Serverless: Almacenamiento Core dirigido por AI
-|           sendemail.go    # Herramienta Serverless: Envío SMTP nativo
-|           webfetch.go     # Herramienta Serverless: Scraping ligero y sanitización HTML
-|           websearch.go    # Herramienta Serverless: Búsqueda Web (DuckDuckGo, Brave...)
-|
-\---sql
-        schema_final.sql    # Setup relacional y de vectores listo para Supabase SQL Editor
+```
+zeroclaw-go/
+├── api/
+│   └── webhook.go              # Entrypoint Serverless — Vercel Function
+├── pkg/
+│   ├── agent/
+│   │   └── loop.go             # Bucle de razonamiento del agente (max 5 iteraciones)
+│   ├── channels/
+│   │   ├── common.go           # Tipos compartidos (IncomingMessage, Channel interface)
+│   │   ├── telegram.go         # Adaptador Telegram (Streaming via EditMessage)
+│   │   ├── discord.go          # Adaptador Discord (Ed25519 verify, Background Worker)
+│   │   ├── slack.go            # Adaptador Slack (URL verification, Events API)
+│   │   └── whatsapp.go         # Adaptador WhatsApp (Cloud API)
+│   ├── core/
+│   │   ├── interfaces.go       # Contratos: Memory, Provider, Tool, Channel
+│   │   ├── identity.go         # System Prompt Builder con inyección temporal
+│   │   └── aieos.go            # Motor de identidad AIEOS v1.1
+│   ├── memory/
+│   │   ├── supabase.go         # Backend RAG: pgvector + FTS + RRF híbrido
+│   │   └── chunker.go          # Smart Chunking (500 chars, 50 overlap)
+│   ├── providers/
+│   │   └── openai.go           # Cliente universal OpenAI-compatible (Stream + Fallback)
+│   └── tools/
+│       ├── websearch.go        # Web Search (DDG/Tavily/Brave)
+│       ├── webfetch.go         # Web Fetch (multi-URL fallback, HTML sanitizer)
+│       ├── httprequest.go      # HTTP Request (GET/POST genérico)
+│       ├── sendemail.go        # Email via net/smtp
+│       ├── makecalendar.go     # Calendar via Make.com webhook
+│       └── memorystore.go      # Core Memory Save (directed by AI)
+├── sql/
+│   └── schema_final.sql        # Schema PostgreSQL definitivo (2048 dims)
+├── go.mod                      # 1 dependencia: lib/pq
+└── vercel.json                 # maxDuration: 60
 ```
 
 ---
 
-## ✨ Características y Herramientas (Serverless-Safe)
-
-ZeroClaw incorpora herramientas eficientes (*Tools/Functions*) blindadas con strict timeouts (`context.WithTimeout`) adaptadas a Vercel.
-
-1. **Memoria Core (`core_memory_save`)**: El agente decide cuándo debe recordar al usuario (nombre, preferencias, etc.) y lo guarda en base de datos.
-2. **WebSearch & Fetch (`websearch`, `webfetch`)**: Capacidades de rastreo e indexación de páginas y búsquedas en tiempo real.
-3. **Peticiones HTTP (`http_request`)**: GET, POST a cualquier API mediante JSONs dinámicos.
-4. **Email & Agenda (`send_email`, `schedule_calendar_event`)**:
-   - El agente envía correos usando estándares de Go `net/smtp` vía credenciales estables, con cero dependencias ajenas.
-   - Crea eventos de calendario disparando **Make.com Webhooks**, salvaguardando al proyecto de pesar cientos de megas (evitando SDKs masivos de la nube).
-5. **🧠 Arquitectura de Cerebro Dividido (Split Providers)**: El framework permite configurar un modelo ultrarrápido para razonar (ej: Groq con Llama-3, Cerebras, xAI) y un modelo gratuito completamente diferente exclusivamente para vectorizar la memoria (ej: OpenAI `text-embedding-3-small`, Google Gemini o NVIDIA vía OpenRouter). Esto maximiza la velocidad de respuesta y reduce los costos de embedding a prácticamente cero, ya que cada proveedor se configura de forma independiente con sus propias variables (`OPENAI_*` para Chat, `EMBEDDING_*` para vectorización).
-
-*Todo gestionado por el adaptador `api/webhook.go` y orquestado en `pkg/agent/loop.go`.*
-
----
-
-## 📅 Configuración de Asistente Personal (Email & Calendario)
-
-ZeroClaw puede interactuar con el mundo real agendando citas en tu calendario y enviando correos electrónicos. Sigue esta sencilla guía paso a paso para activarlo:
-
-### 1. Configuración de Email (SMTP Nativo)
-
-El bot utiliza el protocolo puro y ultra-ligero `net/smtp` de Go para evitar depender de SDKs voluminosos.
-
-**Instrucciones para enviar desde un correo Gmail:**
-
-1. Ve a los ajustes de tu cuenta de Google.
-2. Navega a **Seguridad** -> **Verificación en 2 pasos**.
-3. Busca la opción inferior **"Contraseñas de aplicaciones"** (*App Passwords*).
-4. Genera una nueva contraseña (te dará una clave de 16 caracteres, ej: `abcd efgh ijkl mnop`).
-5. Copia esa clave; esta será tu `SMTP_PASSWORD`.
-
-Agrega las siguientes variables a tu entorno (Vercel):
-
-- `SMTP_USER`: Tu correo de Gmail completo (ej: `tu.correo@gmail.com`).
-- `SMTP_PASSWORD`: La clave de 16 letras obtenida (sin espacios).
-- `SMTP_HOST`: URL del servidor (por defecto, puedes colocar `smtp.gmail.com`).
-- `SMTP_PORT`: Puerto saliente (por defecto `587`).
-
-### 2. Configuración de Google Calendar (Vía Make.com)
-
-En lugar de forzar al bot a cargar cientos de dependencias de la consola de Google Cloud, usamos **Make.com** como un puente Serverless 100% gratuito.
-
-**Pasos en Make.com:**
-
-1. Crea una cuenta gratuita en [Make.com](https://www.make.com).
-2. Crea un **nuevo escenario** (*Create a new scenario*) y añade el módulo "**Webhooks -> Custom webhook**". Ponle un nombre y copia la URL que te genera.
-3. Haz clic en añadir otro módulo, busca e inserta "**Google Calendar -> Create an Event**" y conecta/autoriza tu cuenta principal de Google.
-4. Mapea los datos dinámicos recibidos por el webhook hacia el Evento de Google:
-   - `Event Name` -> Selecciona la variable `title`.
-   - `Start Date` -> Selecciona la variable `start_date`.
-   - `End Date` -> Selecciona la variable `end_date`.
-   - `Description` -> Selecciona la variable `description`.
-5. Pulsa el botón inferior izquierdo para **Activar el escenario** (*Scheduling: ON*).
-
-Agrega la siguiente variable a tu entorno (Vercel):
-
-- `MAKE_CALENDAR_WEBHOOK`: Pega aquí la URL exacta que copiaste en el paso 2 de Make.com.
-
----
-
-## 🚀 Guía Rápida de Instalación (Despliegue)
-
-### 1. Preparar la Base de Datos (Supabase)
-
-La memoria híbrida requiere una base robusta:
-
-1. Crea un nuevo proyecto en [Supabase](https://supabase.com).
-2. Abre la consola / SQL Editor e inserta y ejecuta todo el bloque de [`sql/schema_final.sql`](sql/schema_final.sql).
-3. Obtén tu cadena de conexión URI en la configuración (Database -> Connection String -> URI), usando **Modo Transacción** (puerto `6543`, `prefer_simple_protocol=on`).
-
-### 2. Desplegar a Vercel
-
-Realiza un Push al repositorio en Github/Gitlab y vincúlalo para crear un Proyecto en [Vercel](https://vercel.com).
-Añade las siguientes **Variables de Entorno** en la pestaña de configuración del proyecto (`Project Settings` > `Environment Variables`):
-
-| Variable | Ejemplo / Por Defecto | Propósito |
-|----------|----------------------|-----------|
-| `SUPABASE_DB_URL` | `postgresql://...:6543/postgres?sslmode=require` | Conexión vital a la memoria RAG del agente. |
-| `OPENAI_API_KEY` | `sk-proj...` | Clave API del proveedor LLM a elegir. |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Nombre del modelo que procesará el razonamiento. |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Sobrescribe para usar Groq/OpenRouter. |
-| `EMBEDDING_API_KEY` | `sk-proj...` (opcional) | API Key independiente para generar Embeddings (si usas distinto proveedor). |
-| `EMBEDDING_MODEL` | `text-embedding-3-small` | Modelo usado para vectorizar los chunks en Supabase. |
-| `EMBEDDING_BASE_URL` | `https://api.openai.com/v1` | URL base independiente para el endpoint de Embeddings. |
-| `TELEGRAM_BOT_TOKEN` | `123456:ABC-DEF...` | Token del bot de Telegram. |
-| `DISCORD_BOT_TOKEN` | `MTIz...` | Token del bot de Discord. |
-| `DISCORD_APP_ID` | `1122334455...` | Requerido por Discord para gestionar Interacciones y Webhooks. |
-| `DISCORD_PUBLIC_KEY` | `abcdef123...` | Requerido por Discord para verificar las firmas de los Webhooks. |
-| `SYSTEM_PROMPT` | `Eres ZeroClaw...` (opcional) | Sobrescribe el profile de instrucciones base del agente. |
-| `MAKE_CALENDAR_WEBHOOK` | `https://hook.us1.make.com/...` | Webhook de Make para agendar eventos de calendario. |
-| `SMTP_USER` | `tuemail@gmail.com` | Correo emisor para el agente. |
-| `SMTP_PASSWORD` | Clave de 16 letras | Autenticación SMTP (App Password de Google). |
-| `SMTP_HOST` | `smtp.gmail.com` | Host principal de conexión de correo (default). |
-| `SMTP_PORT` | `587` | Puerto de salida seguro del servidor de correos (default). |
-| `MASTER_SESSION_ID` | `mi_bot_global` (opcional) | Unifica la memoria del agente entre canales. Si se configura, el bot compartirá el mismo historial y recuerdos sin importar si el usuario le habla por Telegram o Discord. |
-| `AIEOS_PROFILE` | `{"identity":{...}}` (opcional) | Permite inyectar un JSON personalizado para cambiar la identidad y psicología del bot (nombre, rol, personalidad). |
-
-> ⚠️ **Nota sobre Tiempos de Ejecución en Vercel**
->
-> El archivo `vercel.json` configura `maxDuration: 60`. El plan gratuito **Hobby** de Vercel permite funciones en Go de hasta **60 segundos**, que es exactamente lo que aprovechamos. Esto es **vital** para que el Agente tenga tiempo suficiente de razonar, navegar por internet, ejecutar herramientas encadenadas y devolver una respuesta completa sin que Vercel corte la conexión prematuramente. Si tu proyecto estuviera en un plan inferior sin esta capacidad, el LLM podría ser interrumpido a mitad de una búsqueda web o del envío de un email.
-
-### 3. Configurar Webhooks de Canales (Uso)
-
-Para que las plataformas se comuniquen con Vercel, debes registrar la URL del servidor usando los apartados de desarrolladores de cada plataforma:
-
-- **La URL base será siempre:** `https://<TU_DOMINIO_VERCEL>.vercel.app/api/webhook`
-
-- **En Telegram**: Accede a este link desde tu navegador para fijar tu Webhook:
-  `https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<DOMAIN>/api/webhook?channel=telegram`
-
-- **En Discord**:
-  1. Registra en el *Discord Developer Portal* > tu App > **Interactivity & Eventing** la URL de Endpoint de Interacciones: `https://<DOMAIN>/api/webhook?channel=discord`.
-  2. **¡Paso clave!** Para registrar globalmente tu comando `/chat` en los servidores donde el bot sea invitado, simplemente visita esta URL temporal en tu navegador **una sola vez**:
-     `https://<DOMAIN>/api/webhook?setup_discord=true`
-     *(ZeroClaw registrará automáticamente la Interfaz del Slash Command usando tu TOKEN publicando éxito "✅").*
-
-*(Nota general: ZeroClaw inspecciona y deduce dinámicamente el Payload del Webhook si en algún caso omites el query params `?channel=`, ajustando automáticamente).*
-
----
-
 <p align="center">
-<sub>Built with ❤️ for the Serverless Future</sub>
+  <sub>Built with ❤️ and Go for the Serverless Future</sub><br>
+  <sub><strong>ZeroClaw Go — Serverless Edition v1.0.0</strong></sub>
 </p>
