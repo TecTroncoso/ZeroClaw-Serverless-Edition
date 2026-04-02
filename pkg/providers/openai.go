@@ -149,6 +149,9 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []core.ChatMessage, 
 }
 
 // ChatStream performs a structured chat and streams text content to a callback.
+// If the stream fails (e.g., TCP RST mid-stream), it falls back to a non-streaming
+// Chat call which has its own retry logic, preventing transient network errors
+// from losing completed tool work.
 func (p *OpenAIProvider) ChatStream(ctx context.Context, messages []core.ChatMessage, tools []core.ToolSpec, model string, temperature float64, callback core.StreamCallback) (*core.ChatResponse, error) {
 	if model == "" {
 		model = p.model
@@ -159,11 +162,20 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, messages []core.ChatMes
 
 	respBody, err := p.doStreamRequest(ctx, "/chat/completions", reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("stream request failed: %w", err)
+		// Stream connection failed — fallback to non-streaming (has retry logic)
+		log.Printf("ZeroClaw: Stream request failed (%v), falling back to non-streaming", err)
+		return p.Chat(ctx, messages, tools, model, temperature)
 	}
 	defer respBody.Close()
 
-	return p.parseStreamResponse(respBody, callback)
+	resp, parseErr := p.parseStreamResponse(respBody, callback)
+	if parseErr != nil {
+		// Stream broke mid-read (e.g., connection reset by peer) — fallback
+		log.Printf("ZeroClaw: Stream parse failed (%v), falling back to non-streaming", parseErr)
+		return p.Chat(ctx, messages, tools, model, temperature)
+	}
+
+	return resp, nil
 }
 
 // SupportsNativeTools returns true (OpenAI supports function calling).
