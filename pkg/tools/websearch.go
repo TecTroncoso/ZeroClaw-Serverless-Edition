@@ -21,6 +21,13 @@ import (
 // WEB SEARCH TOOL
 // ============================================================================
 
+// Compiled regexes for DuckDuckGo parsing to avoid recompilation overhead
+var (
+	htmlTagStripper   = regexp.MustCompile(`<[^>]+>`)
+	ddgLinkPattern    = regexp.MustCompile(`(?s)<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
+	ddgSnippetPattern = regexp.MustCompile(`(?s)class="result__snippet"[^>]*>(.*?)</(?:a|td)>`)
+)
+
 // WebSearchTool implements the Tool interface for web search.
 // Supports multiple search providers: DuckDuckGo (free), Tavily, and Brave Search.
 type WebSearchTool struct {
@@ -203,7 +210,7 @@ func (t *WebSearchTool) searchDuckDuckGo(ctx context.Context, query string, numR
 	}
 
 	// Parse HTML response
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024)) // 512KB limit to prevent massive memory allocations
 	if err != nil {
 		return nil, err
 	}
@@ -215,17 +222,12 @@ func (t *WebSearchTool) searchDuckDuckGo(ctx context.Context, query string, numR
 func (t *WebSearchTool) parseDuckDuckGoHTML(html string, maxResults int) []SearchResult {
 	results := []SearchResult{}
 
-	// Regex to strip HTML tags from extracted content
-	htmlTagPattern := regexp.MustCompile(`<[^>]+>`)
-
 	// Extract result links: <a class="result__a" href="...">Title (may contain <b> tags)</a>
-	linkPattern := regexp.MustCompile(`(?s)<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
-	linkMatches := linkPattern.FindAllStringSubmatch(html, maxResults*2)
+	linkMatches := ddgLinkPattern.FindAllStringSubmatch(html, maxResults*2)
 
 	// Extract snippets: <a class="result__snippet" ...>Snippet (may contain <b> tags)</a>
 	// Also try <td class="result__snippet"> for alternate format
-	snippetPattern := regexp.MustCompile(`(?s)class="result__snippet"[^>]*>(.*?)</(?:a|td)>`)
-	snippetMatches := snippetPattern.FindAllStringSubmatch(html, maxResults*2)
+	snippetMatches := ddgSnippetPattern.FindAllStringSubmatch(html, maxResults*2)
 
 	// Pair up links and snippets
 	for i := 0; i < len(linkMatches) && len(results) < maxResults; i++ {
@@ -253,13 +255,13 @@ func (t *WebSearchTool) parseDuckDuckGoHTML(html string, maxResults int) []Searc
 		}
 
 		// Strip HTML tags from title
-		cleanTitle := htmlTagPattern.ReplaceAllString(rawTitle, "")
+		cleanTitle := htmlTagStripper.ReplaceAllString(rawTitle, "")
 		cleanTitle = strings.TrimSpace(cleanTitle)
 
 		// Get corresponding snippet (if available)
 		snippet := ""
 		if i < len(snippetMatches) {
-			snippet = htmlTagPattern.ReplaceAllString(snippetMatches[i][1], "")
+			snippet = htmlTagStripper.ReplaceAllString(snippetMatches[i][1], "")
 			snippet = strings.TrimSpace(snippet)
 		}
 
